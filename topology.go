@@ -70,7 +70,7 @@ type Node struct {
 	Jobs    []Job `json:"jobs"`
 }
 
-func marshall(node Node) []byte {
+func marshall(node *Node) []byte {
 	bnode, err := json.Marshal(node)
 	if err != nil {
 		log.Fatal(err)
@@ -107,15 +107,19 @@ func NewClient(c *config.Config) *Client {
 	}
 }
 
+func (self *Client) Close() {
+	self.Cli.Close()
+}
+
 // Test if specified labels are present in node
-func (self *Node) testLabels(kvs KVS) bool {
+func (self *Node) testLabels(labels KVS) bool {
 	have := true
-	if len(self.Labels.Kvs) < len(kvs.Kvs) {
+	if len(self.Labels.Kvs) < len(labels.Kvs) {
 		return false
 	}
 
-	for k, v := range self.Labels.Kvs {
-		if _, ok := dict[k]; !ok {
+	for k, _ := range labels.Kvs {
+		if _, ok := self.Labels.Kvs[k]; !ok {
 			have = false
 			break
 		}
@@ -126,20 +130,34 @@ func (self *Node) testLabels(kvs KVS) bool {
 
 // If labesl are present, add new configs
 func (self *Node) addConfigs(labels, data KVS) {
-	if self.testLabels(labels.Kvs) {
+	if self.testLabels(labels) {
 		for k, v := range data.Kvs {
 			self.Configs.Kvs[k] = v
 		}
 	}
 }
 
-func (self *Client) CreateConfig(regionid, clusterid, nodeid, jobid string, labels, configs KVS) {
-	key := fmt.Sprintf("/topology/%s/%s/%s/", regionid, clusterid, nodeid)
-	resp, _ := self.Kv.Get(self.Ctx, key)
-	for _, item := range resp.Kvs {
-		// Get node data from ETCD
-		node := unmarshall(item.Value)
+// Select Nodes that contains labels or key-value pares specified by user
+func (self *Client) SelectNodes(clusterid, regionid string, selector KVS) []Nodes {
+	var nodes = []Nodes{}
 
+	key := fmt.Sprintf("/topology/%s/%s/", regionid, clusterid)
+	for _, node := range self.GetClusterNodes(regionid, clusterid) {
+		if node.testLabels(selector) {
+			nodes = append(nodes, node)
+		}
+	}
+
+	return nodes
+}
+
+// add new configuration to specific node
+func (self *Client) CreateNodeConfig(regionid, clusterid, nodeid, jobid string, labels, configs KVS) {
+	key := fmt.Sprintf("/topology/%s/%s/%s/", regionid, clusterid, nodeid)
+
+	// Get node data from ETCD
+	node := self.GetClusterNode(regionid, clusterid, nodeid)
+	if node != nil {
 		// Update current configs with new ones
 		node.addConfigs(labels, configs)
 
@@ -147,18 +165,20 @@ func (self *Client) CreateConfig(regionid, clusterid, nodeid, jobid string, labe
 		self.Kv.Put(self.Ctx, key, string(marshall(node)))
 
 		//TODO: Notify some Task queue to push configs to the devices
+	} else {
+		fmt.Println("Error")
 	}
 }
 
-func (self *Client) CreateSecret(regionid, clusterid, nodeid string, labels, secrets KVS) {
+func (self *Client) CreateNodeSecret(regionid, clusterid, nodeid string, labels, secrets KVS) {
 
 }
 
-func (self *Client) GetNodes(regionid, clusterid string) []Node {
+func (self *Client) GetClusterNodes(regionid, clusterid string) []Node {
 	var nodes []Node
-	nodesKey := fmt.Sprintf("/topology/%s/%s/") // /toplology/regionid/clusterid/
-
+	nodesKey := fmt.Sprintf("/topology/%s/%s/", regionid, clusterid) // /toplology/regionid/clusterid/
 	gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
+
 	for _, item := range gr.Kvs {
 		node := unmarshall(item.Value)
 		nodes = append(nodes, *node)
@@ -167,23 +187,41 @@ func (self *Client) GetNodes(regionid, clusterid string) []Node {
 	return nodes
 }
 
-func (self *Client) AddNode(clusterid, regionid, nodeid string, node Node) error {
-	nodeKey := fmt.Sprintf("/toplology/%s/%s/%s") // /topology/regionid/clusterid/nodeid/
-	nodeData := marshall(node)
-	_, err := self.Kv.Put(self.Ctx, nodeKey, string(nodeData))
+func (self *Client) PrintClusterNodes(regionid, clusterid string) {
+	nodesKey := fmt.Sprintf("/topology/%s/%s/", regionid, clusterid) // /toplology/regionid/clusterid/
+	gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
 
-	return err
+	for _, item := range gr.Kvs {
+		fmt.Println(string(item.Key))
+		fmt.Println(string(item.Value))
+		fmt.Println("\n")
+	}
 }
 
-func (self *Client) Put() {
-	k := "/topology/region/nodes"
+func (self *Client) GetClusterNode(regionid, clusterid, nodeid string) *Node {
+	key := fmt.Sprintf("/topology/%s/%s/%s/", regionid, clusterid, nodeid)
+	resp, _ := self.Kv.Get(self.Ctx, key)
 
-	_, _ = self.Kv.Put(self.Ctx, k, "test1")
-	_, _ = self.Kv.Put(self.Ctx, k, "test2")
-
-	resp, _ := self.Kv.Get(self.Ctx, k)
 	for _, item := range resp.Kvs {
-		fmt.Println(string(item.Key), string(item.Value))
+		node := unmarshall(item.Value)
+		return node
+	}
+
+	return nil
+}
+
+func (self *Client) AddNode(regionid, clusterid, nodeid string, node *Node) int64 {
+	nodeKey := fmt.Sprintf("/topology/%s/%s/%s/", regionid, clusterid, nodeid) // /topology/regionid/clusterid/nodeid/
+	nodeData := marshall(node)
+	pr, _ := self.Kv.Put(self.Ctx, nodeKey, string(nodeData))
+
+	return pr.Header.Revision
+}
+
+func (self *Client) printEtcd() {
+	gr, _ := self.Kv.Get(self.Ctx, "/topology/", clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
+	for _, item := range gr.Kvs {
+		fmt.Println(string(item.Value))
 	}
 }
 
@@ -247,29 +285,32 @@ func test() []Node {
 	return []Node{node1, node2}
 }
 
-func (self *Client) Close() {
-	self.Cli.Close()
+func testStore(c *Client) {
+	for i, item := range test() {
+		nodeid := fmt.Sprintf("node-%d", i)
+		rev := c.AddNode("novisad", "grbavica", nodeid, &item)
+		fmt.Println("Added", item, "Revision", rev)
+	}
 }
 
-func testStore() {
-	for _, item := range test() {
-		str := marshall(item)
-		fmt.Println(string(str))
+func testJson() {
+	for _, n := range test() {
+		s := marshall(&n)
+		fmt.Println(string(s))
 		fmt.Println("\n")
-
-		n := unmarshall(str)
-		fmt.Println(n)
-		fmt.Println("\n")
-
 	}
 }
 
 func main() {
-	// client := NewClient(config.DefaultConfig())
-	// defer client.Close()
+	client := NewClient(config.DefaultConfig())
+	defer client.Close()
 
-	// client.GetNodes()
-	// client.Put()
+	client.PrintClusterNodes("novisad", "grbavica")
+	// testStore(client)
 
-	testStore()
+	// testJson()
+
+	//n := client.GetClusterNode("novisad", "grbavica", "node-1")
+	//fmt.Println(n)
+	//client.printEtcd()
 }

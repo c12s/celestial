@@ -1,23 +1,6 @@
 package main
 
-import "fmt"
-
-type Test struct {
-	Name string
-}
+import "github.com/c12s/celestial/client"
 
 func main() {
-	fmt.Println("Hello world!")
-
-	t := getTest("hello")
-
-	fmt.Println(t)
-}
-
-func getTest(name string) *Test {
-	test := Test{
-		Name: name,
-	}
-
-	return &test
 }

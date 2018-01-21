@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/c12s/celestial/config"
-	"github.com/c12s/celestial/topology"
 	"github.com/coreos/etcd/clientv3"
 	"time"
 )
@@ -40,8 +39,8 @@ func (self *Client) Close() {
 }
 
 // Select Nodes that contains labels or key-value pairs specified by user
-func (self *Client) SelectNodes(clusterid, regionid string, selector KVS) []topology.Node {
-	nodes := []topology.Node{}
+func (self *Client) SelectNodes(clusterid, regionid string, selector KVS) []Node {
+	nodes := []Node{}
 
 	for _, node := range self.GetClusterNodes(regionid, clusterid) {
 		if node.TestLabels(selector) {
@@ -86,9 +85,9 @@ func (self *Client) MutateJobs(regionid, clusterid string, selector, data KVS, k
 	}
 }
 
-func (self *Client) GetClusterNodes(regionid, clusterid string) []topology.Node {
+func (self *Client) GetClusterNodes(regionid, clusterid string) []Node {
 	nodesKey := GenerateKey(regionid, clusterid) // /toplology/regionid/clusterid/
-	nodes := []topology.Node{}
+	nodes := []Node{}
 
 	gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
 	for _, item := range gr.Kvs {

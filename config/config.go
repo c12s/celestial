@@ -45,11 +45,11 @@ func (self *Config) SetEndpoints(endpoints []string) {
 	self.Endpoints = endpoints
 }
 
-func (self *Config) SetDialTimeout(dialTime int) {
+func (self *Config) SetDialTimeout(dialTime int32) {
 	self.DialTimeout = dialTime
 }
 
-func (self *Config) RequestTimeout(requestTimeout int) {
+func (self *Config) SetRequestTimeout(requestTimeout int32) {
 	self.RequestTimeout = requestTimeout
 }
 

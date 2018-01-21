@@ -40,7 +40,7 @@ func (self *Node) TestLabels(labels KVS) bool {
 
 // Test is specified labels are present in job
 func (self *Job) TestLabels(labels KVS) bool {
-	have = true
+	have := true
 	if len(self.Labels.Kvs) != len(labels.Kvs) {
 		return true
 	}
@@ -95,7 +95,7 @@ func (self *Job) AddConfig(labels, data KVS, kind int) {
 func (self *Node) SelectJobs(selector KVS) []Job {
 	jobs := []Job{}
 	for _, job := range self.Jobs {
-		if job.testLabels(selector) {
+		if job.TestLabels(selector) {
 			jobs = append(jobs, job)
 		}
 	}

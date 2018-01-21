@@ -7,9 +7,12 @@ import (
 )
 
 func main() {
-	conf := config.DefaultConfig()
-
-	fmt.Println(conf)
+	conf, err := config.ConfigFile()
+	if err != nil {
+		fmt.Println("Error")
+	} else {
+		fmt.Println(conf)
+	}
 
 	// c := client.NewClient(conf)
 	// defer c.Close()

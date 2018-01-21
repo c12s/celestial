@@ -5,18 +5,8 @@ import (
 	"io/ioutil"
 )
 
-// type celestial struct {
-// 	Conf Config `yaml:"celestial"`
-// }
-
-// type Config struct {
-// 	Endpoints      []string `yaml:"endpoints"`
-// 	DialTimeout    int32    `yaml:"dialtimeout"`
-// 	RequestTimeout int32    `yaml:"requesttimeout"`
-// }
-
 func ConfigFile(n ...string) (*Config, error) {
-	path := "../config.yml"
+	path := "config.yml"
 	if len(n) > 0 {
 		path = n[0]
 	}

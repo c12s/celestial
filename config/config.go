@@ -41,6 +41,18 @@ func DefaultConfig() *Config {
 	return &conf
 }
 
+func (self *Config) SetEndpoints(endpoints []string) {
+	self.Endpoints = endpoints
+}
+
+func (self *Config) SetDialTimeout(dialTime int) {
+	self.DialTimeout = dialTime
+}
+
+func (self *Config) RequestTimeout(requestTimeout int) {
+	self.RequestTimeout = requestTimeout
+}
+
 func check(e error) {
 	if e != nil {
 		panic(e)

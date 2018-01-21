@@ -7,6 +7,7 @@ import (
 	"github.com/c12s/celestial/config"
 	"github.com/coreos/etcd/clientv3"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -111,10 +112,15 @@ func (self *Client) Close() {
 	self.Cli.Close()
 }
 
+func (self *Client) generateKey(data ...string) string {
+	key := "/topology/%s/"
+	return fmt.Sprintf(key, strings.Join(data, "/"))
+}
+
 // Test if specified labels are present in node
 func (self *Node) testLabels(labels KVS) bool {
 	have := true
-	if len(self.Labels.Kvs) < len(labels.Kvs) {
+	if len(self.Labels.Kvs) != len(labels.Kvs) {
 		return false
 	}
 
@@ -128,57 +134,118 @@ func (self *Node) testLabels(labels KVS) bool {
 	return have
 }
 
-// If labesl are present, add new configs
-func (self *Node) addConfigs(labels, data KVS) {
-	if self.testLabels(labels) {
+// Test is specified labels are present in job
+func (self *Job) testLabels(labels KVS) bool {
+	have = true
+	if len(self.Labels.Kvs) != len(labels.Kvs) {
+		return true
+	}
+
+	for k, _ := range labels.Kvs {
+		if _, ok := self.Labels.Kvs[k]; !ok {
+			have = false
+			break
+		}
+	}
+
+	return have
+}
+
+const SECRETS = 1
+const CONFIGS = 2
+
+// If labels are present, add new configs
+func (self *Node) addConfigs(labels, data KVS, kind int) {
+	switch kind {
+	case SECRETS:
+		for k, v := range data.Kvs {
+			self.Secrets.Kvs[k] = v
+		}
+	default:
 		for k, v := range data.Kvs {
 			self.Configs.Kvs[k] = v
 		}
 	}
 }
 
-// Select Nodes that contains labels or key-value pares specified by user
-func (self *Client) SelectNodes(clusterid, regionid string, selector KVS) []Nodes {
-	var nodes = []Nodes{}
+// If labels are present, add new configs
+func (self *Job) addConfigs(labels, data KVS, kind int) {
+	switch kind {
+	case SECRETS:
+		for k, v := range data.Kvs {
+			self.Secrets.Kvs[k] = v
+		}
+	default:
+		for k, v := range data.Kvs {
+			self.Configs.Kvs[k] = v
+		}
+	}
+}
 
-	key := fmt.Sprintf("/topology/%s/%s/", regionid, clusterid)
+// Select Nodes that contains labels or key-value pairs specified by user
+func (self *Client) SelectNodes(clusterid, regionid string, selector KVS) []Node {
+	nodes := []Node{}
+	key := self.generateKey(regionid, clusterid)
+
 	for _, node := range self.GetClusterNodes(regionid, clusterid) {
 		if node.testLabels(selector) {
 			nodes = append(nodes, node)
 		}
 	}
-
 	return nodes
 }
 
-// add new configuration to specific node
-func (self *Client) CreateNodeConfig(regionid, clusterid, nodeid, jobid string, labels, configs KVS) {
-	key := fmt.Sprintf("/topology/%s/%s/%s/", regionid, clusterid, nodeid)
+// Select Jobs that contains labels or key-value pairs specified by user
+func (self *Node) SelectJobs(selector KVS) []Job {
+	jobs := []Job{}
+	for _, job := range self.Jobs {
+		if job.testLabels(selector) {
+			jobs = append(jobs, job)
+		}
+	}
+	return jobs
+}
 
-	// Get node data from ETCD
-	node := self.GetClusterNode(regionid, clusterid, nodeid)
-	if node != nil {
+// Add new configuration to specific nodes
+func (self *Client) MutateNodes(regionid, clusterid string, labels, data KVS, kind int) {
+	key := self.generateKey(regionid, clusterid)
+
+	// Get nodes data from ETCD that contains selector labels
+	for _, node := range self.SelectNodes(regionid, clusterid, labels) {
 		// Update current configs with new ones
-		node.addConfigs(labels, configs)
+		node.addConfigs(labels, data, kind)
 
 		// Save back to ETCD
 		self.Kv.Put(self.Ctx, key, string(marshall(node)))
 
 		//TODO: Notify some Task queue to push configs to the devices
-	} else {
-		fmt.Println("Error")
 	}
 }
 
-func (self *Client) CreateNodeSecret(regionid, clusterid, nodeid string, labels, secrets KVS) {
+// Add new configuration to specific jobs
+func (self *Client) MutateJobs(regionid, clusterid string, selector, data KVS, kind int) {
+	key := self.generateKey(regionid, clusterid)
 
+	// Get nodes from specific cluster fomr ETCD
+	for _, node := range self.GetClusterNodes(regionid, clusterid) {
+		// Select jobs that contains selector labels
+		for _, job := range node.SelectJobs(selector) {
+			// Update jobs configuration
+			job.addConfigs(selector, data, kind)
+
+			// Save back to ETCD
+			self.Kv.Put(self.Ctx, key, string(marshall(node)))
+
+			//TODO: Notify some Task queue to push configs to the devices
+		}
+	}
 }
 
 func (self *Client) GetClusterNodes(regionid, clusterid string) []Node {
-	var nodes []Node
-	nodesKey := fmt.Sprintf("/topology/%s/%s/", regionid, clusterid) // /toplology/regionid/clusterid/
+	nodesKey := self.generateKey(regionid, clusterid) // /toplology/regionid/clusterid/
 	gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
 
+	nodes := []Node{}
 	for _, item := range gr.Kvs {
 		node := unmarshall(item.Value)
 		nodes = append(nodes, *node)
@@ -188,7 +255,7 @@ func (self *Client) GetClusterNodes(regionid, clusterid string) []Node {
 }
 
 func (self *Client) PrintClusterNodes(regionid, clusterid string) {
-	nodesKey := fmt.Sprintf("/topology/%s/%s/", regionid, clusterid) // /toplology/regionid/clusterid/
+	nodesKey := self.generateKey(regionid, clusterid) // /toplology/regionid/clusterid/
 	gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
 
 	for _, item := range gr.Kvs {
@@ -199,7 +266,7 @@ func (self *Client) PrintClusterNodes(regionid, clusterid string) {
 }
 
 func (self *Client) GetClusterNode(regionid, clusterid, nodeid string) *Node {
-	key := fmt.Sprintf("/topology/%s/%s/%s/", regionid, clusterid, nodeid)
+	key := self.generateKey(regionid, clusterid, nodeid)
 	resp, _ := self.Kv.Get(self.Ctx, key)
 
 	for _, item := range resp.Kvs {
@@ -211,7 +278,7 @@ func (self *Client) GetClusterNode(regionid, clusterid, nodeid string) *Node {
 }
 
 func (self *Client) AddNode(regionid, clusterid, nodeid string, node *Node) int64 {
-	nodeKey := fmt.Sprintf("/topology/%s/%s/%s/", regionid, clusterid, nodeid) // /topology/regionid/clusterid/nodeid/
+	nodeKey := self.generateKey(regionid, clusterid, nodeid) // /topology/regionid/clusterid/nodeid/
 	nodeData := marshall(node)
 	pr, _ := self.Kv.Put(self.Ctx, nodeKey, string(nodeData))
 

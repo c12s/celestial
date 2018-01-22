@@ -3,6 +3,7 @@ package config
 import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"time"
 )
 
 func ConfigFile(n ...string) (*Config, error) {
@@ -62,12 +63,24 @@ func (self *Config) SetEndpoints(endpoints []string) {
 	self.ClientConf.Endpoints = endpoints
 }
 
-func (self *Config) SetDialTimeout(dialTime int32) {
+func (self *Config) SetDialTimeout(dialTime int) {
 	self.ClientConf.DialTimeout = dialTime
 }
 
-func (self *Config) SetRequestTimeout(requestTimeout int32) {
+func (self *Config) SetRequestTimeout(requestTimeout int) {
 	self.ClientConf.RequestTimeout = requestTimeout
+}
+
+func (self *Config) GetRequestTimeout() time.Duration {
+	return time.Duration(self.ClientConf.RequestTimeout) * time.Second
+}
+
+func (self *Config) GetDialTimeout() time.Duration {
+	return time.Duration(self.ClientConf.DialTimeout) * time.Second
+}
+
+func (self *Config) GetEndpoints() []string {
+	return self.ClientConf.Endpoints
 }
 
 func check(e error) {

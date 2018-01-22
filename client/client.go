@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/c12s/celestial/config"
 	"github.com/coreos/etcd/clientv3"
-	"time"
 )
 
 type Client struct {
@@ -16,13 +15,11 @@ type Client struct {
 
 // Create a new celestial client connection to kev-value store
 func NewClient(c *config.Config) *Client {
-	dialTimeout := time.Duration(c.RequestTimeout) * time.Second
-	requestTimeout := time.Duration(c.DialTimeout) * time.Second
-
-	ctx, _ := context.WithTimeout(context.Background(), requestTimeout)
+	fmt.Println(c.GetRequestTimeout(), c.GetDialTimeout(), c.GetEndpoints())
+	ctx, _ := context.WithTimeout(context.Background(), c.GetRequestTimeout())
 	cli, _ := clientv3.New(clientv3.Config{
-		DialTimeout: dialTimeout,
-		Endpoints:   c.Endpoints,
+		DialTimeout: c.GetDialTimeout(),
+		Endpoints:   c.GetEndpoints(),
 	})
 	kv := clientv3.NewKV(cli)
 

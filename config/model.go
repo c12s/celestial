@@ -19,8 +19,8 @@ type ClientSecurity struct {
 type ClientConfig struct {
 	Security       ClientSecurity `yaml:"security"`
 	Endpoints      []string       `yaml:"endpoints"`
-	DialTimeout    int32          `yaml:"dialtimeout"`
-	RequestTimeout int32          `yaml:"requesttimeout"`
+	DialTimeout    int            `yaml:"dialtimeout"`
+	RequestTimeout int            `yaml:"requesttimeout"`
 }
 
 type ConnectionConfig struct {

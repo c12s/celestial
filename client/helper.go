@@ -6,8 +6,10 @@ import (
 	"strings"
 )
 
-const SECRETS = 1
-const CONFIGS = 2
+const (
+	SECRETS = 1
+	CONFIGS = 2
+)
 
 func Unmarshall(blob []byte) *Node {
 	var node Node

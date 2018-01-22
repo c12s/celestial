@@ -1,11 +1,3 @@
-# celestial:
-#   endpoints:
-#     - localhost1:8000
-#     - localhost2:8000
-#     - localhost3:8000
-#   dialtimeout: 2
-#   requesttimeout: 10
-
 celestial:
   version: v1
   client:

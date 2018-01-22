@@ -83,6 +83,10 @@ func (self *Config) GetEndpoints() []string {
 	return self.ClientConf.Endpoints
 }
 
+func (self *Config) GetApiAddress() string {
+	return self.ConnectionConf.Rest.Address
+}
+
 func check(e error) {
 	if e != nil {
 		panic(e)

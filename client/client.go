@@ -36,23 +36,26 @@ func (self *Client) Close() {
 }
 
 // Select Nodes that contains labels or key-value pairs specified by user
-func (self *Client) SelectNodes(clusterid, regionid string, selector KVS) []Node {
-	nodes := []Node{}
-
-	for _, node := range self.GetClusterNodes(regionid, clusterid) {
-		if node.TestLabels(selector) {
-			nodes = append(nodes, node)
+// Return Node chanel from witch you get data, at the end of process it close the chanel
+func (self *Client) SelectNodes(clusterid, regionid string, selector KVS) <-chan Node {
+	nodeChan := make(chan Node)
+	go func() {
+		for node := range self.GetClusterNodes(regionid, clusterid) {
+			if node.TestLabels(selector) {
+				nodeChan <- node
+			}
 		}
-	}
-	return nodes
+		close(nodeChan)
+	}()
+
+	return nodeChan
 }
 
 // Add new configuration to specific nodes
 func (self *Client) MutateNodes(regionid, clusterid string, labels, data KVS, kind int) {
 	key := GenerateKey(regionid, clusterid)
-
 	// Get nodes data from ETCD that contains selector labels
-	for _, node := range self.SelectNodes(regionid, clusterid, labels) {
+	for node := range self.SelectNodes(regionid, clusterid, labels) {
 		// Update current configs with new ones
 		node.AddConfig(labels, data, kind)
 
@@ -63,60 +66,67 @@ func (self *Client) MutateNodes(regionid, clusterid string, labels, data KVS, ki
 	}
 }
 
+func (self *Client) nodesGenerator(regionid, clusterid string) <-chan Node {
+	nodeChan := make(chan Node)
+	go func() {
+		for node := range self.GetClusterNodes(regionid, clusterid) {
+			nodeChan <- node
+		}
+		close(nodeChan)
+	}()
+
+	return nodeChan
+}
+
+func (self *Client) jobesGenerator(regionid, clusterid string, selector, data KVS, kind int) <-chan Node {
+	nodesChan := make(chan Node)
+	go func() {
+		for node := range self.GetClusterNodes(regionid, clusterid) {
+			for job := range node.SelectJobs(selector) {
+				// Update jobs configuration
+				job.AddConfig(selector, data, kind)
+			}
+			nodesChan <- node
+		}
+	}()
+	return nodesChan
+}
+
 // Add new configuration to specific jobs
 func (self *Client) MutateJobs(regionid, clusterid string, selector, data KVS, kind int) {
 	key := GenerateKey(regionid, clusterid)
+	for node := range self.jobesGenerator(regionid, clusterid, selector, data, kind) {
+		// Save back to ETCD
+		self.Kv.Put(self.Ctx, key, string(node.Marshall()))
 
-	// Get nodes from specific cluster fomr ETCD
-	for _, node := range self.GetClusterNodes(regionid, clusterid) {
-		// Select jobs that contains selector labels
-		for _, job := range node.SelectJobs(selector) {
-			// Update jobs configuration
-			job.AddConfig(selector, data, kind)
+		//TODO: Notify some Task queue to push configs to the devices
+	}
+}
 
-			// Save back to ETCD
-			self.Kv.Put(self.Ctx, key, string(node.Marshall()))
-
-			//TODO: Notify some Task queue to push configs to the devices
+func (self *Client) GetClusterNodes(regionid, clusterid string) <-chan Node {
+	nodeChan := make(chan Node)
+	go func() {
+		nodesKey := GenerateKey(regionid, clusterid) // /toplology/regionid/clusterid/
+		gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
+		for _, item := range gr.Kvs {
+			nodeChan <- *Unmarshall(item.Value)
 		}
-	}
+		close(nodeChan)
+	}()
+	return nodeChan
 }
 
-func (self *Client) GetClusterNodes(regionid, clusterid string) []Node {
-	nodesKey := GenerateKey(regionid, clusterid) // /toplology/regionid/clusterid/
-	nodes := []Node{}
-
-	gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
-	for _, item := range gr.Kvs {
-		node := Unmarshall(item.Value)
-		nodes = append(nodes, *node)
-	}
-
-	return nodes
-}
-
-func (self *Client) PrintClusterNodes(regionid, clusterid string) {
-	nodesKey := GenerateKey(regionid, clusterid) // /toplology/regionid/clusterid/
-
-	gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
-	for _, item := range gr.Kvs {
-		fmt.Println(string(item.Key))
-		fmt.Println(string(item.Value))
-		fmt.Println("\n")
-	}
-}
-
-func (self *Client) GetClusterNode(regionid, clusterid, nodeid string) *Node {
-	key := GenerateKey(regionid, clusterid, nodeid)
-
-	resp, _ := self.Kv.Get(self.Ctx, key)
-
-	for _, item := range resp.Kvs {
-		node := Unmarshall(item.Value)
-		return node
-	}
-
-	return nil
+func (self *Client) PrintClusterNodes(regionid, clusterid string) <-chan string {
+	nodesChan := make(chan string)
+	go func() {
+		nodesKey := GenerateKey(regionid, clusterid) // /toplology/regionid/clusterid/
+		gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
+		for _, item := range gr.Kvs {
+			nodesChan <- fmt.Sprintf("Key:%s\nData:\n%s\n", string(item.Key), string(item.Value))
+		}
+		close(nodesChan)
+	}()
+	return nodesChan
 }
 
 func (self *Client) AddNode(regionid, clusterid, nodeid string, node *Node) int64 {

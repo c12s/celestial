@@ -23,36 +23,40 @@ type Node struct {
 
 // Test if specified labels are present in node
 func (self *Node) TestLabels(labels KVS) bool {
-	have := true
+	retChan := make(chan bool)
 	if len(self.Labels.Kvs) != len(labels.Kvs) {
 		return false
 	}
 
-	for k, _ := range labels.Kvs {
-		if _, ok := self.Labels.Kvs[k]; !ok {
-			have = false
-			break
+	go func() {
+		for k, _ := range labels.Kvs {
+			if _, ok := self.Labels.Kvs[k]; !ok {
+				retChan <- false
+				break
+			}
 		}
-	}
-
-	return have
+		retChan <- true
+	}()
+	return <-retChan
 }
 
 // Test is specified labels are present in job
 func (self *Job) TestLabels(labels KVS) bool {
-	have := true
+	retChan := make(chan bool)
 	if len(self.Labels.Kvs) != len(labels.Kvs) {
 		return true
 	}
 
-	for k, _ := range labels.Kvs {
-		if _, ok := self.Labels.Kvs[k]; !ok {
-			have = false
-			break
+	go func() {
+		for k, _ := range labels.Kvs {
+			if _, ok := self.Labels.Kvs[k]; !ok {
+				retChan <- false
+				break
+			}
 		}
-	}
-
-	return have
+		retChan <- true
+	}()
+	return <-retChan
 }
 
 // Marshall node informations into byte array
@@ -92,12 +96,17 @@ func (self *Job) AddConfig(labels, data KVS, kind int) {
 }
 
 // Select Jobs that contains labels or key-value pairs specified by user
-func (self *Node) SelectJobs(selector KVS) []Job {
-	jobs := []Job{}
-	for _, job := range self.Jobs {
-		if job.TestLabels(selector) {
-			jobs = append(jobs, job)
+// Return Job chanel from witch jobs will arrive
+func (self *Node) SelectJobs(selector KVS) <-chan Job {
+	jobChan := make(chan Job)
+	go func() {
+		for _, job := range self.Jobs {
+			if job.TestLabels(selector) {
+				jobChan <- job
+			}
 		}
-	}
-	return jobs
+		close(jobChan)
+	}()
+
+	return jobChan
 }

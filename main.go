@@ -2,6 +2,8 @@ package main
 
 import (
 	"github.com/c12s/celestial/client"
+	//"github.com/c12s/celestial/api"
+	"fmt"
 	"github.com/c12s/celestial/config"
 	"log"
 )
@@ -15,5 +17,11 @@ func main() {
 	c := client.NewClient(conf)
 	defer c.Close()
 
-	c.PrintClusterNodes("novisad", "grbavica")
+	for n := range c.PrintClusterNodes("novisad", "grbavica") {
+		fmt.Println(n)
+	}
+
+	//a := api.NewApi(conf.GetApiAddress())
+	//a.Run()
+
 }

@@ -47,7 +47,6 @@ func (self *Client) SelectNodes(clusterid, regionid string, selector KVS) <-chan
 		}
 		close(nodeChan)
 	}()
-
 	return nodeChan
 }
 
@@ -74,7 +73,6 @@ func (self *Client) nodesGenerator(regionid, clusterid string) <-chan Node {
 		}
 		close(nodeChan)
 	}()
-
 	return nodeChan
 }
 

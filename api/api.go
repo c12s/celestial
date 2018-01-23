@@ -23,6 +23,7 @@ func NewApi(conf *config.Config) *Api {
 
 	a.Router.HandleFunc("/", index).Methods("GET")
 	a.Router.HandleFunc("/v1/celestial/{regionid}/{clusterid}/nodes", a.clusterNodes).Methods("GET")
+	a.Router.HandleFunc("/v1/celestial/{regionid}/{clusterid}/{nodeid}", a.nodeConfigs).Methods("GET")
 
 	return a
 }
@@ -53,6 +54,23 @@ func (self *Api) clusterNodes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendJSONResponse(w, nodes)
+}
+
+func (self *Api) nodeConfigs(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	regionid := vars["regionid"]
+	clusterid := vars["clusterid"]
+	nodeid := vars["nodeid"]
+
+	client := self.newClient()
+	defer client.Close()
+
+	kvs, err := client.NodeConfigs(regionid, clusterid, nodeid)
+	if err != nil {
+		sendJSONResponse(w, "no such node")
+	}
+
+	sendJSONResponse(w, kvs)
 }
 
 func index(w http.ResponseWriter, r *http.Request) {

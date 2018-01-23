@@ -137,7 +137,7 @@ func (self *Client) PrintClusterNodes(regionid, clusterid string) <-chan string 
 	return nodesChan
 }
 
-func (self *Client) AddNode(regionid, clusterid, nodeid string, node *Node) int {
+func (self *Client) AddNode(regionid, clusterid, nodeid string, node *Node) int64 {
 	nodeKey := generateKey(regionid, clusterid, nodeid) // /topology/regionid/clusterid/nodeid/
 	nodeData := node.marshall()
 	pr, err := self.Kv.Put(self.Ctx, nodeKey, string(nodeData))
@@ -150,7 +150,7 @@ func (self *Client) AddNode(regionid, clusterid, nodeid string, node *Node) int 
 
 // Return all configurations for specific node in some cluster at some region
 // Returned values is key-value par where key is name of config and value is config value
-func (self *Client) GetNodeConfigs(regionid, clusterid, nodeid string) (KVS, error) {
+func (self *Client) NodeConfigs(regionid, clusterid, nodeid string) (KVS, error) {
 	nodeKey := generateKey(regionid, clusterid, nodeid)
 	resp, err := self.Kv.Get(self.Ctx, nodeKey)
 	if err != nil {
@@ -167,7 +167,7 @@ func (self *Client) GetNodeConfigs(regionid, clusterid, nodeid string) (KVS, err
 
 // Return all secrets for specific node in some cluster at some region
 // Returned values is key-value par where key is name of secret and value is secret value
-func (self *Client) GenNodeSecrets(regionid, clusterid, nodeid string) (KVS, error) {
+func (self *Client) NodeSecrets(regionid, clusterid, nodeid string) (KVS, error) {
 	nodeKey := generateKey(regionid, clusterid, nodeid)
 	resp, err := self.Kv.Get(self.Ctx, nodeKey)
 	if err != nil {

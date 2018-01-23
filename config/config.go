@@ -83,8 +83,8 @@ func (self *ClientConfig) GetEndpoints() []string {
 	return self.Endpoints
 }
 
-func (self *ConnectionConfig) GetApiAddress() string {
-	return self.Rest.Address
+func (self *Config) GetApiAddress() string {
+	return self.ConnectionConf.Rest.Address
 }
 
 func (self *Config) GetClientConfig() *ClientConfig {

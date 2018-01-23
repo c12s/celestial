@@ -22,7 +22,7 @@ type Node struct {
 }
 
 // Test if specified labels are present in node
-func (self *Node) TestLabels(labels KVS) bool {
+func (self *Node) testLabels(labels KVS) bool {
 	retChan := make(chan bool)
 	if len(self.Labels.Kvs) != len(labels.Kvs) {
 		return false
@@ -41,7 +41,7 @@ func (self *Node) TestLabels(labels KVS) bool {
 }
 
 // Test is specified labels are present in job
-func (self *Job) TestLabels(labels KVS) bool {
+func (self *Job) testLabels(labels KVS) bool {
 	retChan := make(chan bool)
 	if len(self.Labels.Kvs) != len(labels.Kvs) {
 		return true
@@ -60,7 +60,7 @@ func (self *Job) TestLabels(labels KVS) bool {
 }
 
 // Marshall node informations into byte array
-func (self *Node) Marshall() []byte {
+func (self *Node) marshall() []byte {
 	bnode, err := json.Marshal(self)
 	Check(err)
 
@@ -68,7 +68,7 @@ func (self *Node) Marshall() []byte {
 }
 
 // If labels are present, add new configs
-func (self *Node) AddConfig(labels, data KVS, kind int) {
+func (self *Node) addConfig(labels, data KVS, kind int) {
 	switch kind {
 	case SECRETS:
 		for k, v := range data.Kvs {
@@ -82,7 +82,7 @@ func (self *Node) AddConfig(labels, data KVS, kind int) {
 }
 
 // If labels are present, add new configs
-func (self *Job) AddConfig(labels, data KVS, kind int) {
+func (self *Job) addConfig(labels, data KVS, kind int) {
 	switch kind {
 	case SECRETS:
 		for k, v := range data.Kvs {
@@ -97,11 +97,11 @@ func (self *Job) AddConfig(labels, data KVS, kind int) {
 
 // Select Jobs that contains labels or key-value pairs specified by user
 // Return Job chanel from witch jobs will arrive
-func (self *Node) SelectJobs(selector KVS) <-chan Job {
+func (self *Node) selectJobs(selector KVS) <-chan Job {
 	jobChan := make(chan Job)
 	go func() {
 		for _, job := range self.Jobs {
-			if job.TestLabels(selector) {
+			if job.testLabels(selector) {
 				jobChan <- job
 			}
 		}

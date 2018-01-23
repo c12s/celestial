@@ -12,15 +12,13 @@ import (
 
 type Api struct {
 	Router *mux.Router
-	Client *client.Client
-	Conf   *config.ConnectionConfig
+	Config *config.Config
 }
 
 func NewApi(conf *config.Config) *Api {
 	a := &Api{
 		Router: mux.NewRouter(),
-		Client: client.NewClient(conf.GetClientConfig()),
-		Conf:   conf.GetConnectionConfig(),
+		Config: conf,
 	}
 
 	a.Router.HandleFunc("/", index).Methods("GET")
@@ -29,34 +27,30 @@ func NewApi(conf *config.Config) *Api {
 	return a
 }
 
-func (self *Api) formatPath(params ...string) string {
+func (self *Api) newClient() *client.Client {
+	return client.NewClient(self.Config.GetClientConfig())
+}
 
+func (self *Api) formatPath(params ...string) string {
 	return ""
 }
 
-func (self *Api) Close() {
-	self.Client.Close()
-}
-
 func (self *Api) Run() {
-	defer self.Close()
-	log.Fatal(http.ListenAndServe(self.Conf.GetApiAddress(), self.Router))
+	log.Fatal(http.ListenAndServe(self.Config.GetApiAddress(), self.Router))
 }
 
 func (self *Api) clusterNodes(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
-
 	vars := mux.Vars(r)
 	regionid := vars["regionid"]
 	clusterid := vars["clusterid"]
 
+	client := self.newClient()
+	defer client.Close()
+
 	var nodes []string
-	for n := range self.Client.PrintClusterNodes(regionid, clusterid) {
+	for n := range client.PrintClusterNodes(regionid, clusterid) {
 		nodes = append(nodes, n)
 	}
-
-	// fmt.Fprintln(w, "Hello")
 
 	sendJSONResponse(w, nodes)
 }

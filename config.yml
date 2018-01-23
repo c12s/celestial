@@ -7,7 +7,7 @@ celestial:
       trusted: path/to/file/
     endpoints:
       - 0.0.0.0:2379
-    dialtimeout: 2
+    dialtimeout: 5
     requesttimeout: 10
   connection:
     rpc:

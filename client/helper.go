@@ -11,7 +11,7 @@ const (
 	CONFIGS = 2
 )
 
-func Unmarshall(blob []byte) Node {
+func unmarshall(blob []byte) Node {
 	var node Node
 	err := json.Unmarshal(blob, &node)
 	Check(err)
@@ -19,7 +19,7 @@ func Unmarshall(blob []byte) Node {
 	return node
 }
 
-func GenerateKey(data ...string) string {
+func generateKey(data ...string) string {
 	key := "/topology/%s/"
 	return fmt.Sprintf(key, strings.Join(data, "/"))
 }

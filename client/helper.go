@@ -11,12 +11,12 @@ const (
 	CONFIGS = 2
 )
 
-func Unmarshall(blob []byte) *Node {
+func Unmarshall(blob []byte) Node {
 	var node Node
 	err := json.Unmarshal(blob, &node)
 	Check(err)
 
-	return &node
+	return node
 }
 
 func GenerateKey(data ...string) string {

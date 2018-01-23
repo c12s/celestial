@@ -3,29 +3,62 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/c12s/celestial/client"
+	"github.com/c12s/celestial/config"
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 )
 
-type App struct {
-	Router  *mux.Router
-	Address string
+type Api struct {
+	Router *mux.Router
+	Client *client.Client
+	Conf   *config.ConnectionConfig
 }
 
-func NewApi(address string) *App {
-	a := App{
-		Router:  mux.NewRouter(),
-		Address: address,
+func NewApi(conf *config.Config) *Api {
+	a := &Api{
+		Router: mux.NewRouter(),
+		Client: client.NewClient(conf.GetClientConfig()),
+		Conf:   conf.GetConnectionConfig(),
 	}
 
-	a.Router.HandleFunc("/hello/", index).Methods("GET")
+	a.Router.HandleFunc("/", index).Methods("GET")
+	a.Router.HandleFunc("/v1/celestial/{regionid}/{clusterid}/nodes", a.clusterNodes).Methods("GET")
 
-	return &a
+	return a
 }
 
-func (self *App) Run() {
-	log.Fatal(http.ListenAndServe(self.Address, self.Router))
+func (self *Api) formatPath(params ...string) string {
+
+	return ""
+}
+
+func (self *Api) Close() {
+	self.Client.Close()
+}
+
+func (self *Api) Run() {
+	defer self.Close()
+	log.Fatal(http.ListenAndServe(self.Conf.GetApiAddress(), self.Router))
+}
+
+func (self *Api) clusterNodes(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+
+	vars := mux.Vars(r)
+	regionid := vars["regionid"]
+	clusterid := vars["clusterid"]
+
+	var nodes []string
+	for n := range self.Client.PrintClusterNodes(regionid, clusterid) {
+		nodes = append(nodes, n)
+	}
+
+	// fmt.Fprintln(w, "Hello")
+
+	sendJSONResponse(w, nodes)
 }
 
 func index(w http.ResponseWriter, r *http.Request) {

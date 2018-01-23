@@ -10,12 +10,11 @@ import (
 type Client struct {
 	Kv  clientv3.KV
 	Ctx context.Context
-	Cli clientv3.Client
+	Cli *clientv3.Client
 }
 
 // Create a new celestial client connection to kev-value store
-func NewClient(c *config.Config) *Client {
-	fmt.Println(c.GetRequestTimeout(), c.GetDialTimeout(), c.GetEndpoints())
+func NewClient(c *config.ClientConfig) *Client {
 	ctx, _ := context.WithTimeout(context.Background(), c.GetRequestTimeout())
 	cli, _ := clientv3.New(clientv3.Config{
 		DialTimeout: c.GetDialTimeout(),
@@ -26,7 +25,7 @@ func NewClient(c *config.Config) *Client {
 	return &Client{
 		Kv:  kv,
 		Ctx: ctx,
-		Cli: *cli,
+		Cli: cli,
 	}
 }
 
@@ -86,6 +85,7 @@ func (self *Client) jobesGenerator(regionid, clusterid string, selector, data KV
 			}
 			nodesChan <- node
 		}
+		close(nodesChan)
 	}()
 	return nodesChan
 }
@@ -107,7 +107,7 @@ func (self *Client) GetClusterNodes(regionid, clusterid string) <-chan Node {
 		nodesKey := GenerateKey(regionid, clusterid) // /toplology/regionid/clusterid/
 		gr, _ := self.Kv.Get(self.Ctx, nodesKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
 		for _, item := range gr.Kvs {
-			nodeChan <- *Unmarshall(item.Value)
+			nodeChan <- Unmarshall(item.Value)
 		}
 		close(nodeChan)
 	}()

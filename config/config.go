@@ -59,32 +59,40 @@ func DefaultConfig() *Config {
 	return &conf
 }
 
-func (self *Config) SetEndpoints(endpoints []string) {
-	self.ClientConf.Endpoints = endpoints
+func (self *ClientConfig) SetEndpoints(endpoints []string) {
+	self.Endpoints = endpoints
 }
 
-func (self *Config) SetDialTimeout(dialTime int) {
-	self.ClientConf.DialTimeout = dialTime
+func (self *ClientConfig) SetDialTimeout(dialTime int) {
+	self.DialTimeout = dialTime
 }
 
-func (self *Config) SetRequestTimeout(requestTimeout int) {
-	self.ClientConf.RequestTimeout = requestTimeout
+func (self *ClientConfig) SetRequestTimeout(requestTimeout int) {
+	self.RequestTimeout = requestTimeout
 }
 
-func (self *Config) GetRequestTimeout() time.Duration {
-	return time.Duration(self.ClientConf.RequestTimeout) * time.Second
+func (self *ClientConfig) GetRequestTimeout() time.Duration {
+	return time.Duration(self.RequestTimeout) * time.Second
 }
 
-func (self *Config) GetDialTimeout() time.Duration {
-	return time.Duration(self.ClientConf.DialTimeout) * time.Second
+func (self *ClientConfig) GetDialTimeout() time.Duration {
+	return time.Duration(self.DialTimeout) * time.Second
 }
 
-func (self *Config) GetEndpoints() []string {
-	return self.ClientConf.Endpoints
+func (self *ClientConfig) GetEndpoints() []string {
+	return self.Endpoints
 }
 
-func (self *Config) GetApiAddress() string {
-	return self.ConnectionConf.Rest.Address
+func (self *ConnectionConfig) GetApiAddress() string {
+	return self.Rest.Address
+}
+
+func (self *Config) GetClientConfig() *ClientConfig {
+	return &self.ClientConf
+}
+
+func (self *Config) GetConnectionConfig() *ConnectionConfig {
+	return &self.ConnectionConf
 }
 
 func check(e error) {

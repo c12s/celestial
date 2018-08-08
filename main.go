@@ -1,10 +1,8 @@
 package main
 
 import (
-	//"fmt"
-	//"github.com/c12s/celestial/client"
-	"github.com/c12s/celestial/api"
-	"github.com/c12s/celestial/config"
+	"fmt"
+	"github.com/c12s/celestial/model/config"
 	"log"
 )
 
@@ -13,6 +11,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Println(conf)
 
 	// c := client.NewClient(conf.GetClientConfig())
 	// defer c.Close()
@@ -23,7 +23,7 @@ func main() {
 	// 	}
 	// }
 
-	a := api.NewApi(conf)
-	a.Run()
+	// a := api.NewApi(conf)
+	// a.Run()
 
 }

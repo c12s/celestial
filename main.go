@@ -2,17 +2,29 @@ package main
 
 import (
 	"fmt"
-	"github.com/c12s/celestial/model/config"
+	"github.com/c12s/celestial/model"
+	"github.com/c12s/celestial/storage/etcd"
 	"log"
 )
 
 func main() {
-	conf, err := config.ConfigFile()
+	// Load configurations
+	conf, err := model.ConfigFile()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println(conf)
+
+	//Load database
+	db, err := etcd.New(conf.GetClientConfig())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(db)
+
+	//Start server
 
 	// c := client.NewClient(conf.GetClientConfig())
 	// defer c.Close()

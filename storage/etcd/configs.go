@@ -2,17 +2,17 @@ package etcd
 
 import (
 	"context"
-	"github.com/c12s/celestial/model/storage"
+	"github.com/c12s/celestial/model"
 )
 
 type Configs struct {
 	db *DB
 }
 
-func (s *Configs) List(ctx context.Context, regionid, clusterid string, labels storage.KVS) (error, []storage.Node) {
+func (s *Configs) List(ctx context.Context, regionid, clusterid string, labels model.KVS) (error, []model.Node) {
 	return nil, nil
 }
 
-func (s *Configd) Mutate(ctx context.Context, regionid, clusterid string, labels, data storage.KVS) error {
+func (s *Configs) Mutate(ctx context.Context, regionid, clusterid string, labels, data model.KVS) error {
 	return nil
 }

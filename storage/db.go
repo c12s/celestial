@@ -2,7 +2,7 @@ package storage
 
 import (
 	"context"
-	"github.com/c12s/celestial/model/storage"
+	"github.com/c12s/celestial/model"
 )
 
 type DB interface {
@@ -11,11 +11,11 @@ type DB interface {
 }
 
 type Configs interface {
-	List(ctx context.Context, regionid, clusterid string, labels storage.KVS) (error, storage.Node)
-	Mutate(ctx context.Context, regionid, clusterid string, labels, data storage.KVS) error
+	List(ctx context.Context, regionid, clusterid string, labels model.KVS) (error, []model.Node)
+	Mutate(ctx context.Context, regionid, clusterid string, labels, data model.KVS) error
 }
 
 type Secrets interface {
-	List(ctx context.Context, regionid, clusterid string, labels storage.KVS) (error, storage.Node)
-	Mutate(ctx context.Context, regionid, clusterid string, labels, data storage.KVS) error
+	List(ctx context.Context, regionid, clusterid string, labels model.KVS) (error, []model.Node)
+	Mutate(ctx context.Context, regionid, clusterid string, labels, data model.KVS) error
 }

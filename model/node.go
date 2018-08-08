@@ -1,4 +1,6 @@
-package storage
+package model
+
+import "github.com/c12s/celestial/helper"
 
 type Node struct {
 	Labels  KVS   `json:"labels"`
@@ -25,7 +27,7 @@ func (self *Node) testLabels(labels KVS) bool {
 // If labels are present, add new configs
 func (self *Node) AddConfig(labels, data KVS, kind int) {
 	switch kind {
-	case SECRETS:
+	case helper.SECRETS:
 		for k, v := range data.Kvs {
 			self.Secrets.Kvs[k] = v
 		}
@@ -42,7 +44,7 @@ func (self *Node) SelectJobs(selector KVS) []Job {
 	jobs := []Job{}
 	for _, job := range self.Jobs {
 		if job.testLabels(selector) {
-			append(jobs, job)
+			jobs = append(jobs, job)
 		}
 	}
 

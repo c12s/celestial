@@ -28,7 +28,7 @@ func NewApi(conf *config.Config) *Api {
 	return a
 }
 
-func (self *Api) newClient() *client.Client {
+func (self *Api) newClient() (*client.Client, error) {
 	return client.NewClient(self.Config.GetClientConfig())
 }
 
@@ -45,12 +45,19 @@ func (self *Api) clusterNodes(w http.ResponseWriter, r *http.Request) {
 	regionid := vars["regionid"]
 	clusterid := vars["clusterid"]
 
-	client := self.newClient()
+	client, _ := self.newClient()
 	defer client.Close()
 
 	var nodes []string
-	for n := range client.PrintClusterNodes(regionid, clusterid) {
-		nodes = append(nodes, n)
+	n, e := client.PrintClusterNodes(regionid, clusterid)
+	select {
+	case v := <-n:
+		for _, item := range v {
+			nodes = append(nodes, item)
+		}
+	case v := <-e:
+		sendJSONResponse(w, <-v)
+		return
 	}
 
 	sendJSONResponse(w, nodes)
@@ -62,12 +69,16 @@ func (self *Api) nodeConfigs(w http.ResponseWriter, r *http.Request) {
 	clusterid := vars["clusterid"]
 	nodeid := vars["nodeid"]
 
-	client := self.newClient()
+	client, _ := self.newClient()
 	defer client.Close()
 
 	kvs, err := client.NodeConfigs(regionid, clusterid, nodeid)
 	if err != nil {
-		sendJSONResponse(w, "no such node")
+		sendJSONResponse(w, err)
+	}
+
+	if kvs.Kvs == nil {
+		sendJSONResponse(w, "no suc node in cluster")
 	}
 
 	sendJSONResponse(w, kvs)

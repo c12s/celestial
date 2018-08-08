@@ -1,4 +1,4 @@
-package model
+package config
 
 type Celestial struct {
 	Conf Config `yaml:"celestial"`

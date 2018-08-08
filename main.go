@@ -2,14 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/c12s/celestial/model"
+	"github.com/c12s/celestial/model/config"
 	"github.com/c12s/celestial/storage/etcd"
 	"log"
 )
 
 func main() {
 	// Load configurations
-	conf, err := model.ConfigFile()
+	conf, err := config.ConfigFile()
 	if err != nil {
 		log.Fatal(err)
 	}

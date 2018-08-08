@@ -1,7 +1,7 @@
 package etcd
 
 import (
-	"github.com/c12s/celestial/model"
+	"github.com/c12s/celestial/model/config"
 	"github.com/c12s/celestial/storage"
 	"github.com/coreos/etcd/clientv3"
 )
@@ -11,7 +11,7 @@ type DB struct {
 	Client *clientv3.Client
 }
 
-func New(c *model.ClientConfig) (*DB, error) {
+func New(c *config.ClientConfig) (*DB, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		DialTimeout: c.GetDialTimeout(),
 		Endpoints:   c.GetEndpoints(),

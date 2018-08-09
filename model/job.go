@@ -1,7 +1,5 @@
 package model
 
-import "github.com/c12s/celestial/helper"
-
 type Job struct {
 	Labels  KVS `json:"labels"`
 	Configs KVS `json:"configs"`
@@ -26,7 +24,7 @@ func (self *Job) testLabels(labels KVS) bool {
 // If labels are present, add new configs
 func (self *Job) AddConfig(labels, data KVS, kind int) {
 	switch kind {
-	case helper.SECRETS:
+	case 1:
 		for k, v := range data.Kvs {
 			self.Secrets.Kvs[k] = v
 		}

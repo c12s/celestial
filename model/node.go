@@ -1,7 +1,5 @@
 package model
 
-import "github.com/c12s/celestial/helper"
-
 type Node struct {
 	Labels  KVS   `json:"labels"`
 	Configs KVS   `json:"configs"`
@@ -10,7 +8,7 @@ type Node struct {
 }
 
 // Test if specified labels are present in node
-func (self *Node) testLabels(labels KVS) bool {
+func (self *Node) TestLabels(labels KVS) bool {
 	if len(self.Labels.Kvs) != len(labels.Kvs) {
 		return false
 	}
@@ -25,9 +23,9 @@ func (self *Node) testLabels(labels KVS) bool {
 }
 
 // If labels are present, add new configs
-func (self *Node) AddConfig(labels, data KVS, kind int) {
+func (self *Node) AddConfig(data KVS, kind int) {
 	switch kind {
-	case helper.SECRETS:
+	case 1:
 		for k, v := range data.Kvs {
 			self.Secrets.Kvs[k] = v
 		}

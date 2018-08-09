@@ -10,6 +10,12 @@ service Secrets{
 }
 
 
+//Enumerations
+enum ReqKind {
+  SECRETS = 0;
+  CONFIGS = 1;
+}
+
 
 //Other messages
 message KV {
@@ -31,7 +37,7 @@ message ListReq {
         string region_id = 1;
         string cluster_id = 2;
         Label labels = 3;
-        string kind = 4;
+        ReqKind kind = 4;
 }
 
 message MutateReq{
@@ -39,7 +45,7 @@ message MutateReq{
          string cluster_id = 2;
          Label label = 3;
          Data data = 4;
-         string kind = 5;
+         ReqKind kind = 5;
 }
 
 

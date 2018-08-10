@@ -12,12 +12,13 @@ type Configs struct {
 }
 
 func (s *Configs) List(ctx context.Context, regionid, clusterid string, labels model.KVS) (error, []model.Node) {
-	return s.db.Select(ctx, regionId, clusterId, labels)
+	key := helper.GenerateKey(regionid, clusterid)
+	return s.db.Select(ctx, key, labels)
 }
 
 func (s *Configs) Mutate(ctx context.Context, regionid, clusterid string, labels, data model.KVS) error {
-	key := helper.GenerateKey(regionId, clusterId)
-	done, err := s.db.SelectAndUpdate(ctx, key, selector, data)
+	key := helper.GenerateKey(regionid, clusterid)
+	done, err := s.db.SelectAndUpdate(ctx, key, labels, data)
 	if err != nil {
 		return err
 	}

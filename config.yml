@@ -14,4 +14,4 @@ celestial:
       address: localhost:8000
     rest:
       address: localhost:8000
-    standalone: True
+    standalone: False

@@ -4,7 +4,7 @@ package service;
 
 
 //Service
-service Secrets{
+service CelestialService{
         rpc List(ListReq) returns(ListResp){}
         rpc Mutate(MutateReq) returns(MutateResp){}
 }
@@ -43,7 +43,7 @@ message ListReq {
 message MutateReq{
          string region_id = 1;
          string cluster_id = 2;
-         Label label = 3;
+         Label labels = 3;
          Data data = 4;
          ReqKind kind = 5;
 }

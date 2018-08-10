@@ -44,15 +44,36 @@ func Check(e error) {
 	}
 }
 
-func ProtoToKVS(req *pb.ListReq) *model.KVS {
+func ProtoToKVS(req *pb.ListReq) model.KVS {
 	m := make(map[string]string)
 
 	for _, item := range req.Labels.Labels {
 		m[item.Key] = item.Value
 	}
 
-	return &model.KVS{
+	return model.KVS{
 		Kvs: m,
 	}
+
+}
+
+func ProtoToKVSMutate(req *pb.MutateReq) (model.KVS, model.KVS) {
+	l := make(map[string]string)
+	d := make(map[string]string)
+
+	for _, item := range req.Labels.Labels {
+		l[item.Key] = item.Value
+	}
+
+	for _, item := range req.Data.Data {
+		d[item.Key] = item.Value
+	}
+
+	return model.KVS{
+			Kvs: l,
+		},
+		model.KVS{
+			Kvs: d,
+		}
 
 }

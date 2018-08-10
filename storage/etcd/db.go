@@ -32,7 +32,7 @@ func New(c *config.ClientConfig) (*DB, error) {
 	}, nil
 }
 
-func (db *DB) Select(ctx context.Context, regionId, clusterId string, selector model.KVS) (error, []model.Node) {
+func (db *DB) Select(ctx context.Context, key string, selector model.KVS) (error, []model.Node) {
 	//First selct only nodes that are inside cluster!
 	gr, err := db.Kv.Get(ctx, key, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
 	if err != nil {
@@ -47,10 +47,10 @@ func (db *DB) Select(ctx context.Context, regionId, clusterId string, selector m
 			return err, nil
 		}
 
-		nodes = append(nodes, node)
+		nodes = append(nodes, *node)
 	}
 
-	return nodes, err
+	return err, nodes
 }
 
 func (db *DB) SelectAndUpdate(ctx context.Context, key string, selector, data model.KVS) (bool, error) {
@@ -62,11 +62,7 @@ func (db *DB) SelectAndUpdate(ctx context.Context, key string, selector, data mo
 	}
 
 	//Than start the transaction... because all nodes must be updated!
-	txn, err = db.Kvs.Txn(ctx)
-	if err != nil {
-		return false, err
-	}
-
+	txn := db.Kv.Txn(ctx)
 	for _, item := range gr.Kvs {
 		node, err := helper.NodeUnmarshall(item.Value)
 		if err != nil {
@@ -76,19 +72,20 @@ func (db *DB) SelectAndUpdate(ctx context.Context, key string, selector, data mo
 		//Test if specific node contains all of given labels
 		// It that is the case than updatem oterwise not!
 		if node.TestLabels(selector) {
-			nodeKey := string(item.Key)
-			data, err := helper.NodeMarshall(node)
+			//Update node
+			node.AddConfig(data, helper.CONFIGS)
+
+			//Do conversion
+			data, err := helper.NodeMarshall(*node)
 			if err != nil {
 				return false, err
 			}
 
-			//Update node
-			data.AddConfig(data, helper.CONFIGS)
-
-			//Convert to string and start transaction
+			//start transaction
 			nodeValue := string(data)
+			nodeKey := string(item.Value)
 			txn = txn.Then(
-				OpPut(nodeKey, nodeValue),
+				clientv3.OpPut(nodeKey, nodeValue),
 			)
 		}
 	}

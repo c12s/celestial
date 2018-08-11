@@ -31,6 +31,12 @@ message Data {
         repeated KV data = 1;
 }
 
+message NodeData {
+        string nodeId = 1;
+        repeated KV data = 2;
+}
+
+
 
 // Requests
 message ListReq {
@@ -52,7 +58,7 @@ message MutateReq{
 // Replys
 message ListResp {
         string error = 1;
-        repeated KV data = 2;
+        repeated NodeData data = 2;
 }
 
 message MutateResp{

@@ -22,32 +22,31 @@ func (s *Server) handleList(ctx context.Context, req *pb.ListReq) (*pb.ListResp,
 		err, _ := s.db.Secrets().List(ctx, req.RegionId, req.ClusterId, labels)
 		if err != nil {
 			log.Fatal(err)
+			fmt.Println(err)
 			return nil, err
 		}
 
 		return &pb.ListResp{
 			Error: "NONE",
-			Data:  []*pb.KV{},
+			Data:  []*pb.NodeData{},
 		}, nil
 	}
 
 	if req.Kind == pb.ReqKind_CONFIGS {
 		labels := helper.ProtoToKVS(req)
-		err, _ := s.db.Configs().List(ctx, req.RegionId, req.ClusterId, labels)
+		err, resp := s.db.Configs().List(ctx, req.RegionId, req.ClusterId, labels)
 		if err != nil {
 			log.Fatal(err)
 			return nil, err
 		}
 
-		return &pb.ListResp{
-			Error: "NONE",
-			Data:  []*pb.KV{},
-		}, nil
+		data := helper.NodeToProto(resp)
+		return data, nil
 	}
 
 	return &pb.ListResp{
 		Error: "Not valid file type",
-		Data:  []*pb.KV{},
+		Data:  []*pb.NodeData{},
 	}, nil
 }
 
@@ -87,18 +86,14 @@ func (s *Server) List(ctx context.Context, req *pb.ListReq) (*pb.ListResp, error
 }
 
 func (s *Server) Mutate(ctx context.Context, req *pb.MutateReq) (*pb.MutateResp, error) {
-	// resp, err := s.handleMutate(ctx, req)
-	// if err != nil {
-	// 	return &pb.MutateResp{
-	// 		error: err.Error(),
-	// 	}, nil
-	// }
+	resp, err := s.handleMutate(ctx, req)
+	if err != nil {
+		return &pb.MutateResp{
+			Error: err.Error(),
+		}, nil
+	}
 
-	// return resp, err
-
-	return &pb.MutateResp{
-		Error: "OK",
-	}, nil
+	return resp, err
 }
 
 func Run(db storage.DB, conf *config.ConnectionConfig) {

@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"github.com/c12s/celestial/model"
@@ -76,4 +77,38 @@ func ProtoToKVSMutate(req *pb.MutateReq) (model.KVS, model.KVS) {
 			Kvs: d,
 		}
 
+}
+
+func NodeToProto(resp []model.Node) *pb.ListResp {
+	data := []*pb.NodeData{}
+
+	for _, item := range resp {
+		kvs := []*pb.KV{}
+		for k, v := range item.Configs.Kvs {
+			kv := &pb.KV{
+				Key:   k,
+				Value: v,
+			}
+			kvs = append(kvs, kv)
+		}
+
+		node := &pb.NodeData{
+			NodeId: hashNode(item),
+			Data:   kvs,
+		}
+		data = append(data, node)
+	}
+
+	return &pb.ListResp{
+		Error: "NONE",
+		Data:  data,
+	}
+}
+
+func hashNode(node model.Node) string {
+	arrBytes := []byte{}
+	jsonBytes, _ := json.Marshal(node)
+	arrBytes = append(arrBytes, jsonBytes...)
+
+	return fmt.Sprintf("%x", md5.Sum(arrBytes))
 }

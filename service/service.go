@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"github.com/c12s/celestial/helper"
 	"github.com/c12s/celestial/model/config"
 	pb "github.com/c12s/celestial/pb"
 	"github.com/c12s/celestial/storage"
@@ -14,70 +13,6 @@ import (
 
 type Server struct {
 	db storage.DB
-}
-
-func (s *Server) handleList(ctx context.Context, req *pb.ListReq) (*pb.ListResp, error) {
-	if req.Kind == pb.ReqKind_SECRETS {
-		labels := helper.ProtoToKVS(req)
-		err, _ := s.db.Secrets().List(ctx, req.RegionId, req.ClusterId, labels)
-		if err != nil {
-			log.Fatal(err)
-			fmt.Println(err)
-			return nil, err
-		}
-
-		return &pb.ListResp{
-			Error: "NONE",
-			Data:  []*pb.NodeData{},
-		}, nil
-	}
-
-	if req.Kind == pb.ReqKind_CONFIGS {
-		labels := helper.ProtoToKVS(req)
-		err, resp := s.db.Configs().List(ctx, req.RegionId, req.ClusterId, labels)
-		if err != nil {
-			log.Fatal(err)
-			return nil, err
-		}
-
-		data := helper.NodeToProto(resp)
-		return data, nil
-	}
-
-	return &pb.ListResp{
-		Error: "Not valid file type",
-		Data:  []*pb.NodeData{},
-	}, nil
-}
-
-func (s *Server) handleMutate(ctx context.Context, req *pb.MutateReq) (*pb.MutateResp, error) {
-	labels, data := helper.ProtoToKVSMutate(req)
-	if req.Kind == pb.ReqKind_SECRETS {
-		err := s.db.Secrets().Mutate(ctx, req.RegionId, req.ClusterId, labels, data)
-		if err != nil {
-			log.Fatal(err)
-			return nil, err
-		}
-
-		return &pb.MutateResp{
-			Error: "NONE",
-		}, nil
-	}
-
-	if req.Kind == pb.ReqKind_CONFIGS {
-		err := s.db.Configs().Mutate(ctx, req.RegionId, req.ClusterId, labels, data)
-		if err != nil {
-			return nil, err
-		}
-
-		return &pb.MutateResp{
-			Error: "NONE",
-		}, nil
-	}
-
-	return &pb.MutateResp{
-		Error: "Not valid file type",
-	}, nil
 }
 
 func (s *Server) List(ctx context.Context, req *pb.ListReq) (*pb.ListResp, error) {

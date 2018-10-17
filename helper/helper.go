@@ -39,44 +39,22 @@ func GenerateKey(data ...string) string {
 	return fmt.Sprintf(key, strings.Join(data, "/"))
 }
 
+func GenerateKeys(regions, clusters []string) []string {
+	keys := []string{}
+	for _, region := range regions {
+		for _, cluster := range clusters {
+			key := GenerateKey(region, cluster)
+			keys = append(keys, key)
+		}
+	}
+
+	return keys
+}
+
 func Check(e error) {
 	if e != nil {
 		panic(e)
 	}
-}
-
-func ProtoToKVS(req *pb.ListReq) model.KVS {
-	m := make(map[string]string)
-
-	for _, item := range req.Labels.Labels {
-		m[item.Key] = item.Value
-	}
-
-	return model.KVS{
-		Kvs: m,
-	}
-
-}
-
-func ProtoToKVSMutate(req *pb.MutateReq) (model.KVS, model.KVS) {
-	l := make(map[string]string)
-	d := make(map[string]string)
-
-	for _, item := range req.Labels.Labels {
-		l[item.Key] = item.Value
-	}
-
-	for _, item := range req.Data.Data {
-		d[item.Key] = item.Value
-	}
-
-	return model.KVS{
-			Kvs: l,
-		},
-		model.KVS{
-			Kvs: d,
-		}
-
 }
 
 func NodeToProto(resp []model.Node) *pb.ListResp {
@@ -102,6 +80,49 @@ func NodeToProto(resp []model.Node) *pb.ListResp {
 	return &pb.ListResp{
 		Error: "NONE",
 		Data:  data,
+	}
+}
+
+func listReq(req *pb.ListReq) *model.KVS {
+	m := make(map[string]string)
+	for _, item := range req.Labels {
+		m[item.Key] = item.Value
+	}
+
+	return &model.KVS{
+		Kvs: m,
+	}
+}
+
+func mutateReq(req *pb.MutateReq) (*model.KVS, *model.KVS, []string, []string) {
+	l := make(map[string]string)
+	d := make(map[string]string)
+
+	for _, item := range req.Content.Labels {
+		l[item.Key] = item.Value
+	}
+
+	for _, item := range req.Content.Data {
+		d[item.Key] = item.Value
+	}
+
+	return &model.KVS{Kvs: l}, &model.KVS{Kvs: d},
+		req.RegionIds, req.ClusterIds
+
+}
+
+func ProtoToKVS(req interface{}, data ...interface{}) {
+	switch castReq := req.(type) {
+	case pb.MutateReq:
+		l, d, r, c := mutateReq(&castReq)
+		data[0] = l
+		data[1] = d
+		data[2] = r
+		data[3] = c
+	case pb.ListReq:
+		data[0] = listReq(&castReq)
+	default:
+		fmt.Println("NOt valid type")
 	}
 }
 

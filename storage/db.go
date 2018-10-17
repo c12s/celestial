@@ -12,10 +12,10 @@ type DB interface {
 
 type Configs interface {
 	List(ctx context.Context, regionid, clusterid string, labels model.KVS) (error, []model.Node)
-	Mutate(ctx context.Context, regionid, clusterid string, labels, data model.KVS) error
+	Mutate(ctx context.Context, regionids, clusterids []string, labels, data model.KVS) error
 }
 
 type Secrets interface {
 	List(ctx context.Context, regionid, clusterid string, labels model.KVS) (error, []model.Node)
-	Mutate(ctx context.Context, regionid, clusterid string, labels, data model.KVS) error
+	Mutate(ctx context.Context, regionids, clusterids []string, labels, data model.KVS) error
 }

@@ -34,7 +34,7 @@ func New(c *config.ClientConfig) (*DB, error) {
 
 func (db *DB) Select(ctx context.Context, key string, selector model.KVS) (error, []model.Node) {
 	//First selct only nodes that are inside cluster!
-	gr, err := db.Kv.Get(ctx, key, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
+	gr, err := db.Kv.Get(ctx, key, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
 		log.Fatal(err)
 		return err, nil
@@ -53,7 +53,18 @@ func (db *DB) Select(ctx context.Context, key string, selector model.KVS) (error
 	return err, nodes
 }
 
-func (db *DB) SelectAndUpdate(ctx context.Context, key string, selector, data model.KVS) (bool, error) {
+func (db *DB) SelectAndUpdate(ctx context.Context, keys []string, selector, data model.KVS) (bool, error) {
+	for _, key := range keys {
+		_, err := db.Update(ctx, key, selector, data)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return true, nil
+}
+
+func (db *DB) Update(ctx context.Context, key string, selector, data model.KVS) (bool, error) {
 	//First selct only nodes that are inside cluster!
 	gr, err := db.Kv.Get(ctx, key, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
 	if err != nil {

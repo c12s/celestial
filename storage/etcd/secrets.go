@@ -13,6 +13,6 @@ func (s *Secrets) List(ctx context.Context, regionid, clusterid string, labels m
 	return nil, nil
 }
 
-func (s *Secrets) Mutate(ctx context.Context, regionid, clusterid string, labels, data model.KVS) error {
+func (s *Secrets) Mutate(ctx context.Context, regionids, clusterids []string, labels, data model.KVS) error {
 	return nil
 }

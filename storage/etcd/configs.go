@@ -16,9 +16,9 @@ func (s *Configs) List(ctx context.Context, regionid, clusterid string, labels m
 	return s.db.Select(ctx, key, labels)
 }
 
-func (s *Configs) Mutate(ctx context.Context, regionid, clusterid string, labels, data model.KVS) error {
-	key := helper.GenerateKey(regionid, clusterid)
-	done, err := s.db.SelectAndUpdate(ctx, key, labels, data)
+func (s *Configs) Mutate(ctx context.Context, regionids, clusterids []string, labels, data model.KVS) error {
+	keys := helper.GenerateKeys(regionids, clusterids)
+	done, err := s.db.SelectAndUpdate(ctx, keys, labels, data)
 	if err != nil {
 		return err
 	}

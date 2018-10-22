@@ -5,9 +5,12 @@ type Celestial struct {
 }
 
 type Config struct {
-	ConfVersion    string           `yaml:"version"`
-	ClientConf     ClientConfig     `yaml:"client"`
-	ConnectionConf ConnectionConfig `yaml:"connection"`
+	ConfVersion    string       `yaml:"version"`
+	Address        string       `yaml:"address"`
+	ClientConf     ClientConfig `yaml:"client"`
+	Endpoints      []string     `yaml:"db"`
+	DialTimeout    int          `yaml:"dialtimeout"`
+	RequestTimeout int          `yaml:"requesttimeout"`
 }
 
 type ClientSecurity struct {
@@ -17,22 +20,5 @@ type ClientSecurity struct {
 }
 
 type ClientConfig struct {
-	Security       ClientSecurity `yaml:"security"`
-	Endpoints      []string       `yaml:"endpoints"`
-	DialTimeout    int            `yaml:"dialtimeout"`
-	RequestTimeout int            `yaml:"requesttimeout"`
-}
-
-type ConnectionConfig struct {
-	Rpc        RPC  `yaml:"rpc"`
-	Rest       REST `yaml:"rest"`
-	Standalone bool `yaml:"standalone"`
-}
-
-type RPC struct {
-	Address string `yaml:"address"`
-}
-
-type REST struct {
-	Address string `yaml:"address"`
+	Security ClientSecurity `yaml:"security"`
 }

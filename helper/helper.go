@@ -1,114 +1,78 @@
 package helper
 
 import (
-	"crypto/md5"
-	"encoding/json"
-	"fmt"
-	"github.com/c12s/celestial/model"
-	pb "github.com/c12s/celestial/pb"
 	"strings"
 )
 
 const (
-	SECRETS = 1
-	CONFIGS = 2
+	namespaces = "namespaces"
+	labels     = "labels"
+	status     = "status"
 )
 
-// Marshall node informations into byte array
-func NodeMarshall(self model.Node) ([]byte, error) {
-	bnode, err := json.Marshal(self)
-	if err != nil {
-		return nil, err
-	}
+/*
+  /regions/regionid/clusters/clusterid/nodes/nodeid
 
-	return bnode, nil
-}
+ /regions
+  -/regionid
+     -/clusters
+       -/clusterid
+         -/nodes
+           -/nodeid
+             -/namespace:labels
+             -/stats
+             -/configs
+             -/secrets
+             -/actions
+             -/jobs
+               -/jobid
+                 -/namespace:labels
+                 -/configs
+                 -/secrets
+                 -/containers...
 
-func NodeUnmarshall(blob []byte) (*model.Node, error) {
-	var node model.Node
-	err := json.Unmarshal(blob, &node)
-	if err != nil {
-		return nil, err
-	}
+/namespaces
+   /namespace
+     -data
+     /labels
+       -kv pairs
+     /status
+       -status value
 
-	return &node, nil
-}
+/namespaces/labels/namespace -> [k:v, k:v]
+/namespaces/namespace -> {data}
+/namespaces/namespace/status -> "status"
 
-func GenerateKey(data ...string) string {
-	key := "/topology/%s/"
-	return fmt.Sprintf(key, strings.Join(data, "/"))
-}
+*/
 
-func Check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
-func ProtoToKVS(req *pb.ListReq) model.KVS {
-	m := make(map[string]string)
-
-	for _, item := range req.Labels.Labels {
-		m[item.Key] = item.Value
-	}
-
-	return model.KVS{
-		Kvs: m,
-	}
-
-}
-
-func ProtoToKVSMutate(req *pb.MutateReq) (model.KVS, model.KVS) {
-	l := make(map[string]string)
-	d := make(map[string]string)
-
-	for _, item := range req.Labels.Labels {
-		l[item.Key] = item.Value
-	}
-
-	for _, item := range req.Data.Data {
-		d[item.Key] = item.Value
-	}
-
-	return model.KVS{
-			Kvs: l,
-		},
-		model.KVS{
-			Kvs: d,
-		}
-
-}
-
-func NodeToProto(resp []model.Node) *pb.ListResp {
-	data := []*pb.NodeData{}
-
-	for _, item := range resp {
-		kvs := []*pb.KV{}
-		for k, v := range item.Configs.Kvs {
-			kv := &pb.KV{
-				Key:   k,
-				Value: v,
-			}
-			kvs = append(kvs, kv)
-		}
-
-		node := &pb.NodeData{
-			NodeId: hashNode(item),
-			Data:   kvs,
-		}
-		data = append(data, node)
-	}
-
-	return &pb.ListResp{
-		Error: "NONE",
-		Data:  data,
+func Merge(m1, m2 map[string]string) {
+	for k, v := range m2 {
+		m1[k] = v
 	}
 }
 
-func hashNode(node model.Node) string {
-	arrBytes := []byte{}
-	jsonBytes, _ := json.Marshal(node)
-	arrBytes = append(arrBytes, jsonBytes...)
+func NSKey(ns string) string {
+	// mid := fmt.Sprintf("%s:%s", namespace, name)
+	s := []string{namespaces, ns}
+	return strings.Join(s, "/")
+}
 
-	return fmt.Sprintf("%x", md5.Sum(arrBytes))
+func NSLabelsKey(name string) string {
+	prefix := NSKey(labels)
+	s := []string{prefix, name}
+	return strings.Join(s, "/")
+}
+
+func NSStatusKey(name string) string {
+	prefix := NSKey(name)
+	s := []string{prefix, status}
+	return strings.Join(s, "/")
+}
+
+func NS() string {
+	return namespaces
+}
+
+func Labels() string {
+	return strings.Join([]string{namespaces, labels}, "/")
 }

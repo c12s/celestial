@@ -2,33 +2,17 @@ package etcd
 
 import (
 	"context"
-	"errors"
-	"github.com/c12s/celestial/helper"
-	"github.com/c12s/celestial/model"
+	cPb "github.com/c12s/scheme/celestial"
 )
 
 type Configs struct {
 	db *DB
 }
 
-func (s *Configs) List(ctx context.Context, regionid, clusterid string, labels model.KVS) (error, []model.Node) {
-	key := helper.GenerateKey(regionid, clusterid)
-	return s.db.Select(ctx, key, labels)
+func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
+	return nil, nil
 }
 
-func (s *Configs) Mutate(ctx context.Context, regionids, clusterids []string, labels, data model.KVS) error {
-	keys := helper.GenerateKeys(regionids, clusterids)
-	done, err := s.db.SelectAndUpdate(ctx, keys, labels, data)
-	if err != nil {
-		return err
-	}
-
-	if !done {
-		err := errors.New("Operation not done, try again!")
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
+	return nil, nil
 }

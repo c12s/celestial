@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"fmt"
 	"github.com/c12s/celestial/helper"
 	cPb "github.com/c12s/scheme/celestial"
 	rPb "github.com/c12s/scheme/core"
@@ -28,21 +27,21 @@ func compare(a, b []string, strict bool) bool {
 	return true
 }
 
-func (n *Namespaces) get(ctx context.Context, key string) (string, int64, string) {
+func (n *Namespaces) get(ctx context.Context, key string) (string, int64, string, string) {
 	gresp, err := n.db.Kv.Get(ctx, key)
 	if err != nil {
-		return "", 0, ""
+		return "", 0, "", ""
 	}
 
 	for _, item := range gresp.Kvs {
 		nsTask := &rPb.Task{}
 		err = proto.Unmarshal(item.Value, nsTask)
 		if err != nil {
-			return "", 0, ""
+			return "", 0, "", ""
 		}
-		return nsTask.Namespace, nsTask.Timestamp, nsTask.Extras["namespace"]
+		return nsTask.Namespace, nsTask.Timestamp, nsTask.Extras["namespace"], nsTask.Extras["labels"]
 	}
-	return "", 0, ""
+	return "", 0, "", ""
 }
 
 func (n *Namespaces) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
@@ -51,9 +50,6 @@ func (n *Namespaces) List(ctx context.Context, extras map[string]string) (error,
 	cmp := extras["compare"]
 	els := strings.Split(extras["labels"], ",")
 	sort.Strings(els)
-
-	fmt.Println(extras)
-
 	if name == "" {
 		gresp, err := n.db.Kv.Get(ctx, helper.Labels(), clientv3.WithPrefix(),
 			clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
@@ -68,30 +64,33 @@ func (n *Namespaces) List(ctx context.Context, extras map[string]string) (error,
 			switch cmp {
 			case "all":
 				if len(ls) == len(els) && compare(ls, els, true) {
-					ns, timestamp, name := n.get(ctx, newKey)
+					ns, timestamp, name, labels := n.get(ctx, newKey)
 					if ns != "" {
 						result.Data["namespace"] = ns
 						result.Data["age"] = strconv.FormatInt(timestamp, 10)
 						result.Data["name"] = name
+						result.Data["labels"] = labels
 					}
 				}
 			case "any":
 				if compare(ls, els, false) {
-					ns, timestamp, name := n.get(ctx, newKey)
+					ns, timestamp, name, labels := n.get(ctx, newKey)
 					if ns != "" {
 						result.Data["namespace"] = ns
 						result.Data["age"] = strconv.FormatInt(timestamp, 10)
 						result.Data["name"] = name
+						result.Data["labels"] = labels
 					}
 				}
 			}
 		}
 	} else {
-		ns, timestamp, name := n.get(ctx, helper.NSKey(name))
+		ns, timestamp, name, labels := n.get(ctx, helper.NSKey(name))
 		if ns != "" {
 			result.Data["namespace"] = ns
 			result.Data["age"] = strconv.FormatInt(timestamp, 10)
 			result.Data["name"] = name
+			result.Data["labels"] = labels
 		}
 	}
 	return nil, result

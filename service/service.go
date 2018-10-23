@@ -21,6 +21,11 @@ func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, err
 	case cPb.ReqKind_ACTIONS:
 	case cPb.ReqKind_CONFIGS:
 	case cPb.ReqKind_NAMESPACES:
+		err, resp := s.db.Namespaces().List(ctx, req.Extras)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	}
 	return &cPb.ListResp{Error: "Not valid file type"}, nil
 }
@@ -33,12 +38,9 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 	case bPb.TaskKind_NAMESPACES:
 		err, resp := s.db.Namespaces().Mutate(ctx, req)
 		if err != nil {
-			fmt.Println(err)
-		} else {
-			fmt.Println(resp)
+			return nil, err
 		}
-
-		return resp, err
+		return resp, nil
 	}
 	return &cPb.MutateResp{Error: "Not valid file type"}, nil
 }

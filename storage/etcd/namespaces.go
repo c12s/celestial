@@ -2,12 +2,14 @@ package etcd
 
 import (
 	"context"
+	"fmt"
 	"github.com/c12s/celestial/helper"
 	cPb "github.com/c12s/scheme/celestial"
 	rPb "github.com/c12s/scheme/core"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -26,21 +28,21 @@ func compare(a, b []string, strict bool) bool {
 	return true
 }
 
-func (n *Namespaces) get(ctx context.Context, key string) (string, int64) {
+func (n *Namespaces) get(ctx context.Context, key string) (string, int64, string) {
 	gresp, err := n.db.Kv.Get(ctx, key)
 	if err != nil {
-		return "", 0
+		return "", 0, ""
 	}
 
 	for _, item := range gresp.Kvs {
-		var nsTask *rPb.Task
+		nsTask := &rPb.Task{}
 		err = proto.Unmarshal(item.Value, nsTask)
 		if err != nil {
-			return "", 0
+			return "", 0, ""
 		}
-		return nsTask.Namespace, nsTask.Timestamp
+		return nsTask.Namespace, nsTask.Timestamp, nsTask.Extras["namespace"]
 	}
-	return "", 0
+	return "", 0, ""
 }
 
 func (n *Namespaces) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
@@ -49,6 +51,8 @@ func (n *Namespaces) List(ctx context.Context, extras map[string]string) (error,
 	cmp := extras["compare"]
 	els := strings.Split(extras["labels"], ",")
 	sort.Strings(els)
+
+	fmt.Println(extras)
 
 	if name == "" {
 		gresp, err := n.db.Kv.Get(ctx, helper.Labels(), clientv3.WithPrefix(),
@@ -64,24 +68,30 @@ func (n *Namespaces) List(ctx context.Context, extras map[string]string) (error,
 			switch cmp {
 			case "all":
 				if len(ls) == len(els) && compare(ls, els, true) {
-					ns, timestamp := n.get(ctx, newKey)
+					ns, timestamp, name := n.get(ctx, newKey)
 					if ns != "" {
-						result.Data[ns] = string(timestamp)
+						result.Data["namespace"] = ns
+						result.Data["age"] = strconv.FormatInt(timestamp, 10)
+						result.Data["name"] = name
 					}
 				}
 			case "any":
 				if compare(ls, els, false) {
-					ns, timestamp := n.get(ctx, newKey)
+					ns, timestamp, name := n.get(ctx, newKey)
 					if ns != "" {
-						result.Data[ns] = string(timestamp)
+						result.Data["namespace"] = ns
+						result.Data["age"] = strconv.FormatInt(timestamp, 10)
+						result.Data["name"] = name
 					}
 				}
 			}
 		}
 	} else {
-		ns, timestamp := n.get(ctx, helper.NSKey(name))
+		ns, timestamp, name := n.get(ctx, helper.NSKey(name))
 		if ns != "" {
-			result.Data[ns] = string(timestamp)
+			result.Data["namespace"] = ns
+			result.Data["age"] = strconv.FormatInt(timestamp, 10)
+			result.Data["name"] = name
 		}
 	}
 	return nil, result

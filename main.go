@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/c12s/celestial/model/config"
 	"github.com/c12s/celestial/service"
 	"github.com/c12s/celestial/storage/etcd"
@@ -16,8 +15,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	fmt.Println(conf)
 
 	//Load database
 	db, err := etcd.New(conf.Endpoints, 10*time.Second)

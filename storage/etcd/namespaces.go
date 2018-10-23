@@ -44,12 +44,13 @@ func (n *Namespaces) get(ctx context.Context, key string) (string, int64, string
 	return "", 0, "", ""
 }
 
-func (n *Namespaces) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
-	result := &cPb.ListResp{Data: map[string]string{}}
-	name := extras["name"]
-	cmp := extras["compare"]
-	els := strings.Split(extras["labels"], ",")
+func (n *Namespaces) List(ctx context.Context, extra map[string]string) (error, *cPb.ListResp) {
+	name := extra["name"]
+	cmp := extra["compare"]
+	els := strings.Split(extra["labels"], ",")
 	sort.Strings(els)
+
+	datas := []*cPb.Data{}
 	if name == "" {
 		gresp, err := n.db.Kv.Get(ctx, helper.Labels(), clientv3.WithPrefix(),
 			clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
@@ -61,39 +62,45 @@ func (n *Namespaces) List(ctx context.Context, extras map[string]string) (error,
 			newKey := strings.Join(strings.Split(key, "/labels/"), "/")
 			ls := strings.Split(string(item.Value), ",")
 			sort.Strings(ls)
+
+			data := &cPb.Data{Data: map[string]string{}}
 			switch cmp {
 			case "all":
 				if len(ls) == len(els) && compare(ls, els, true) {
 					ns, timestamp, name, labels := n.get(ctx, newKey)
 					if ns != "" {
-						result.Data["namespace"] = ns
-						result.Data["age"] = strconv.FormatInt(timestamp, 10)
-						result.Data["name"] = name
-						result.Data["labels"] = labels
+						data.Data["namespace"] = ns
+						data.Data["age"] = strconv.FormatInt(timestamp, 10)
+						data.Data["name"] = name
+						data.Data["labels"] = labels
 					}
+					datas = append(datas, data)
 				}
 			case "any":
 				if compare(ls, els, false) {
 					ns, timestamp, name, labels := n.get(ctx, newKey)
 					if ns != "" {
-						result.Data["namespace"] = ns
-						result.Data["age"] = strconv.FormatInt(timestamp, 10)
-						result.Data["name"] = name
-						result.Data["labels"] = labels
+						data.Data["namespace"] = ns
+						data.Data["age"] = strconv.FormatInt(timestamp, 10)
+						data.Data["name"] = name
+						data.Data["labels"] = labels
 					}
+					datas = append(datas, data)
 				}
 			}
 		}
 	} else {
+		data := &cPb.Data{Data: map[string]string{}}
 		ns, timestamp, name, labels := n.get(ctx, helper.NSKey(name))
 		if ns != "" {
-			result.Data["namespace"] = ns
-			result.Data["age"] = strconv.FormatInt(timestamp, 10)
-			result.Data["name"] = name
-			result.Data["labels"] = labels
+			data.Data["namespace"] = ns
+			data.Data["age"] = strconv.FormatInt(timestamp, 10)
+			data.Data["name"] = name
+			data.Data["labels"] = labels
 		}
+		datas = append(datas, data)
 	}
-	return nil, result
+	return nil, &cPb.ListResp{Data: datas}
 }
 
 func (n *Namespaces) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {

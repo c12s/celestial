@@ -16,17 +16,6 @@ type Namespaces struct {
 	db *DB
 }
 
-func compare(a, b []string, strict bool) bool {
-	for _, akv := range a {
-		for _, bkv := range b {
-			if akv == bkv && !strict {
-				return true
-			}
-		}
-	}
-	return true
-}
-
 func (n *Namespaces) get(ctx context.Context, key string) (string, int64, string, string) {
 	gresp, err := n.db.Kv.Get(ctx, key)
 	if err != nil {
@@ -52,7 +41,7 @@ func (n *Namespaces) List(ctx context.Context, extra map[string]string) (error, 
 
 	datas := []*cPb.Data{}
 	if name == "" {
-		gresp, err := n.db.Kv.Get(ctx, helper.Labels(), clientv3.WithPrefix(),
+		gresp, err := n.db.Kv.Get(ctx, helper.NSLabels(), clientv3.WithPrefix(),
 			clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 		if err != nil {
 			return err, nil
@@ -60,13 +49,12 @@ func (n *Namespaces) List(ctx context.Context, extra map[string]string) (error, 
 		for _, item := range gresp.Kvs {
 			key := string(item.Key)
 			newKey := strings.Join(strings.Split(key, "/labels/"), "/")
-			ls := strings.Split(string(item.Value), ",")
-			sort.Strings(ls)
+			ls := helper.SplitLabels(string(item.Value))
 
 			data := &cPb.Data{Data: map[string]string{}}
 			switch cmp {
 			case "all":
-				if len(ls) == len(els) && compare(ls, els, true) {
+				if len(ls) == len(els) && helper.Compare(ls, els, true) {
 					ns, timestamp, name, labels := n.get(ctx, newKey)
 					if ns != "" {
 						data.Data["namespace"] = ns
@@ -77,7 +65,7 @@ func (n *Namespaces) List(ctx context.Context, extra map[string]string) (error, 
 					datas = append(datas, data)
 				}
 			case "any":
-				if compare(ls, els, false) {
+				if helper.Compare(ls, els, false) {
 					ns, timestamp, name, labels := n.get(ctx, newKey)
 					if ns != "" {
 						data.Data["namespace"] = ns
@@ -122,7 +110,7 @@ func (n *Namespaces) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cP
 	}
 
 	sKey := helper.NSStatusKey(namespace)
-	_, err = n.db.Kv.Put(ctx, sKey, "Active")
+	_, err = n.db.Kv.Put(ctx, sKey, "Done")
 	if err != nil {
 		return err, nil
 	}

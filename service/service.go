@@ -20,6 +20,11 @@ func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, err
 	case cPb.ReqKind_SECRETS:
 	case cPb.ReqKind_ACTIONS:
 	case cPb.ReqKind_CONFIGS:
+		err, resp := s.db.Configs().List(ctx, req.Extras)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	case cPb.ReqKind_NAMESPACES:
 		err, resp := s.db.Namespaces().List(ctx, req.Extras)
 		if err != nil {
@@ -35,6 +40,11 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 	case bPb.TaskKind_SECRETS:
 	case bPb.TaskKind_ACTIONS:
 	case bPb.TaskKind_CONFIGS:
+		err, resp := s.db.Configs().Mutate(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	case bPb.TaskKind_NAMESPACES:
 		err, resp := s.db.Namespaces().Mutate(ctx, req)
 		if err != nil {

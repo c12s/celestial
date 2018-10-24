@@ -10,7 +10,6 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -22,21 +21,35 @@ type Configs struct {
 	db *DB
 }
 
-func (n *Configs) get(ctx context.Context, key string) (string, int64, string, string) {
+func (n *Configs) get(ctx context.Context, key string) (error, *cPb.Data) {
+	data := &cPb.Data{Data: map[string]string{}}
 	gresp, err := n.db.Kv.Get(ctx, key)
 	if err != nil {
-		return "", 0, "", ""
+		return err, nil
 	}
 
 	for _, item := range gresp.Kvs {
-		nsTask := &rPb.Task{}
+		nsTask := &rPb.KV{}
 		err = proto.Unmarshal(item.Value, nsTask)
 		if err != nil {
-			return "", 0, "", ""
+			return err, nil
 		}
-		return nsTask.Namespace, nsTask.Timestamp, nsTask.Extras["namespace"], nsTask.Extras["labels"]
+
+		keyParts := strings.Split(key, "/")
+		data.Data["regionid"] = keyParts[1]
+		data.Data["clusterid"] = keyParts[2]
+		data.Data["nodeid"] = keyParts[3]
+
+		configs := []string{}
+		for k, v := range nsTask.Extras {
+			kv := strings.Join([]string{k, v}, ":")
+			configs = append(configs, kv)
+		}
+		data.Data["configs"] = strings.Join(configs, ",")
+
+		return nil, data
 	}
-	return "", 0, "", ""
+	return err, nil
 }
 
 func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
@@ -45,38 +58,30 @@ func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *c
 	sort.Strings(els)
 
 	datas := []*cPb.Data{}
-	gresp, err := c.db.Kv.Get(ctx, helper.NSLabels(), clientv3.WithPrefix(),
-		clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	searchLabelsKey := helper.JoinParts("", "topology", "labels")
+	gresp, err := c.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
 		return err, nil
 	}
 	for _, item := range gresp.Kvs {
-		key := string(item.Key)
-		newKey := strings.Join(strings.Split(key, "/labels/"), "/")
-		ls := strings.Split(string(item.Value), ",")
-		sort.Strings(ls)
+		keyPart := strings.Join(strings.Split(string(item.Key), "/labels/"), "/")
+		newKey := helper.Join(keyPart, "configs")
 
-		data := &cPb.Data{Data: map[string]string{}}
+		ls := helper.SplitLabels(string(item.Value))
 		switch cmp {
 		case "all":
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				ns, timestamp, name, labels := c.get(ctx, newKey)
-				if ns != "" {
-					data.Data["namespace"] = ns
-					data.Data["age"] = strconv.FormatInt(timestamp, 10)
-					data.Data["name"] = name
-					data.Data["labels"] = labels
+				gerr, data := c.get(ctx, newKey)
+				if gerr != nil {
+					continue
 				}
 				datas = append(datas, data)
 			}
 		case "any":
 			if helper.Compare(ls, els, false) {
-				ns, timestamp, name, labels := c.get(ctx, newKey)
-				if ns != "" {
-					data.Data["namespace"] = ns
-					data.Data["age"] = strconv.FormatInt(timestamp, 10)
-					data.Data["name"] = name
-					data.Data["labels"] = labels
+				gerr, data := c.get(ctx, newKey)
+				if gerr != nil {
+					continue
 				}
 				datas = append(datas, data)
 			}

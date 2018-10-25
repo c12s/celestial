@@ -19,6 +19,11 @@ func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, err
 	switch req.Kind {
 	case cPb.ReqKind_SECRETS:
 	case cPb.ReqKind_ACTIONS:
+		err, resp := s.db.Actions().List(ctx, req.Extras)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	case cPb.ReqKind_CONFIGS:
 		err, resp := s.db.Configs().List(ctx, req.Extras)
 		if err != nil {
@@ -39,6 +44,11 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 	switch req.Mutate.Kind {
 	case bPb.TaskKind_SECRETS:
 	case bPb.TaskKind_ACTIONS:
+		err, resp := s.db.Actions().Mutate(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	case bPb.TaskKind_CONFIGS:
 		err, resp := s.db.Configs().Mutate(ctx, req)
 		if err != nil {

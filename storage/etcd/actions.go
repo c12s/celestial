@@ -9,6 +9,7 @@ import (
 	rPb "github.com/c12s/scheme/core"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
+	"sort"
 	"strings"
 )
 
@@ -16,8 +17,77 @@ type Actions struct {
 	db *DB
 }
 
+func (a *Actions) get(ctx context.Context, key string) (error, *cPb.Data) {
+	data := &cPb.Data{Data: map[string]string{}}
+	gresp, err := a.db.Kv.Get(ctx, key)
+	if err != nil {
+		return err, nil
+	}
+
+	for _, item := range gresp.Kvs {
+		nsTask := &rPb.KV{}
+		err = proto.Unmarshal(item.Value, nsTask)
+		if err != nil {
+			return err, nil
+		}
+
+		keyParts := strings.Split(key, "/")
+		data.Data["regionid"] = keyParts[1]
+		data.Data["clusterid"] = keyParts[2]
+		data.Data["nodeid"] = keyParts[3]
+
+		configs := []string{}
+		for k, v := range nsTask.Extras {
+			kv := strings.Join([]string{k, v}, ":")
+			configs = append(configs, kv)
+		}
+		data.Data["configs"] = strings.Join(configs, ",")
+
+		return nil, data
+	}
+	return err, nil
+}
+
 func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
-	return nil, nil
+	cmp := extras["compare"]
+	els := strings.Split(extras["labels"], ",")
+	sort.Strings(els)
+
+	// top := 0
+	// from := 0
+	// to := 0
+
+	datas := []*cPb.Data{}
+	searchLabelsKey := helper.JoinParts("", "topology", "labels")
+	gresp, err := a.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	if err != nil {
+		return err, nil
+	}
+	for _, item := range gresp.Kvs {
+		keyPart := strings.Join(strings.Split(string(item.Key), "/labels/"), "/")
+		newKey := helper.Join(keyPart, "actions")
+
+		ls := helper.SplitLabels(string(item.Value))
+		switch cmp {
+		case "all":
+			if len(ls) == len(els) && helper.Compare(ls, els, true) {
+				gerr, data := a.get(ctx, newKey)
+				if gerr != nil {
+					continue
+				}
+				datas = append(datas, data)
+			}
+		case "any":
+			if helper.Compare(ls, els, false) {
+				gerr, data := a.get(ctx, newKey)
+				if gerr != nil {
+					continue
+				}
+				datas = append(datas, data)
+			}
+		}
+	}
+	return nil, &cPb.ListResp{Data: datas}
 }
 
 /*
@@ -46,14 +116,16 @@ func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*b
 	// If exists and value is Tombstone than mark that configs for deletation
 	// and executor service will remove it from the nodes
 	// If exists and value is not Tombstone than replace value with new value
+	// WHEN WORKING WITH ACTIONS WE NEED TO PRESEVER ACTIONS ORDER!
 	for _, payload := range payloads {
-		for pk, pv := range payload.Value {
-			actions.Extras[pk] = pv
+		for _, index := range payload.Index {
+			actions.Extras[index] = payload.Value[index]
 		}
+		actions.Index = payload.Index
 	}
-	actions.Timestamp = helper.Timestamp() // add a timestamp. Actoins are grouped byt time!
+	actions.Timestamp = helper.Timestamp() // add a timestamp. Actoins are grouped by time!
 
-	// Save node configs
+	// Save node actions
 	aData, aerr := proto.Marshal(actions)
 	if aerr != nil {
 		return aerr
@@ -81,12 +153,17 @@ func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*b
 		if undone.Undone == nil {
 			undone.Undone = map[string]*rPb.KV{}
 			undone.Undone["actions"] = &rPb.KV{Extras: map[string]string{}}
+		} else if _, ok := undone.Undone["actions"]; !ok {
+			undone.Undone["actions"] = &rPb.KV{Extras: map[string]string{}}
 		}
 
 		// update undone with new stuff thats been added/removed/upddated
 		for k, v := range actions.Extras {
 			undone.Undone["actions"].Extras[k] = v
 		}
+
+		//save index
+		undone.Undone["actions"].Index = actions.Index
 
 		uData, uerr := proto.Marshal(undone)
 		if uerr != nil {
@@ -98,7 +175,6 @@ func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*b
 			return cerr
 		}
 	}
-
 	return nil
 }
 

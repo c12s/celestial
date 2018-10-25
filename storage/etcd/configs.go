@@ -158,6 +158,8 @@ func (c *Configs) mutate(ctx context.Context, key, keyPart string, payloads []*b
 		if undone.Undone == nil {
 			undone.Undone = map[string]*rPb.KV{}
 			undone.Undone["configs"] = &rPb.KV{Extras: map[string]string{}}
+		} else if _, ok := undone.Undone["actions"]; !ok {
+			undone.Undone["configs"] = &rPb.KV{Extras: map[string]string{}}
 		}
 
 		// update undone with new stuff thats been added/removed/upddated

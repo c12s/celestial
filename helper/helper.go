@@ -3,6 +3,7 @@ package helper
 import (
 	"sort"
 	"strings"
+	"time"
 )
 
 const (
@@ -181,4 +182,8 @@ func JoinParts(artifact string, parts ...string) string {
 		s = append(s, artifact)
 	}
 	return strings.Join(s, "/")
+}
+
+func Timestamp() int64 {
+	return time.Now().Unix()
 }

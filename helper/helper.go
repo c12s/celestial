@@ -20,14 +20,6 @@ const (
 )
 
 /*
-namespaces
-   /namespace
-     -data
-     /labels
-       -kv pairs
-     /status
-       -status value
-
 namespaces/labels/namespace -> [k:v, k:v]
 namespaces/namespace -> {data}
 namespaces/namespace/status -> "status"
@@ -93,25 +85,12 @@ func SplitLabels(value string) []string {
 }
 
 /*
-topology/regionid/clusters/clusterid/nodes/nodeid
-
-topology/
-  -/regionid
-     -/clusters
-       -/clusterid
-         -/nodes
-           -/nodeid
-             -/namespace:labels
-             -/configs
-             -/secrets
-             -/actions
-
 topology/labels/regionid/clusterid/nodeid -> [k:v, k:v]
 topology/regionid/clusterid/nodes/nodeid -> {stats}
 topology/regionid/clusterid/nodeid/undone -> [k:v, k:v] unpushed artifacts
 topology/regionid/clusterid/nodeid/configs -> {config list with status}
 topology/regionid/clusterid/nodeid/secrets -> {secrets list with status} [ecnrypted]
-topology/regionid/clusterid/nodeid/actions -> {actions list history with status}
+topology/regionid/clusterid/nodeid/actions/timestamp -> {actions list history with status}
 */
 
 // topology/regionid/clusterid/nodeid -> [k:v, k:v]
@@ -180,6 +159,14 @@ func JoinParts(artifact string, parts ...string) string {
 
 	if artifact != "" {
 		s = append(s, artifact)
+	}
+	return strings.Join(s, "/")
+}
+
+func JoinFull(parts ...string) string {
+	s := []string{}
+	for _, part := range parts {
+		s = append(s, part)
 	}
 	return strings.Join(s, "/")
 }

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/c12s/celestial/helper"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
@@ -10,6 +11,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -17,9 +19,62 @@ type Actions struct {
 	db *DB
 }
 
-func (a *Actions) get(ctx context.Context, key string) (error, *cPb.Data) {
+func construct(key string, nsTask *rPb.KV) *cPb.Data {
 	data := &cPb.Data{Data: map[string]string{}}
-	gresp, err := a.db.Kv.Get(ctx, key)
+
+	keyParts := strings.Split(key, "/")
+	data.Data["regionid"] = keyParts[1]
+	data.Data["clusterid"] = keyParts[2]
+	data.Data["nodeid"] = keyParts[3]
+
+	actions := []string{}
+	for k, v := range nsTask.Extras {
+		kv := strings.Join([]string{k, v}, ":")
+		actions = append(actions, kv)
+	}
+	data.Data["actions"] = strings.Join(actions, ",")
+	data.Data["timestamp"] = strconv.FormatInt(nsTask.Timestamp, 10)
+
+	return data
+}
+
+func (a *Actions) getHT(ctx context.Context, key string, head, tail int64) (error, *cPb.Data) {
+	if head != 0 {
+		gresp, err := a.db.Kv.Get(ctx, key, clientv3.WithPrefix(),
+			clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend), clientv3.WithLimit(head))
+		if err != nil {
+			return err, nil
+		}
+		for _, item := range gresp.Kvs {
+			nsTask := &rPb.KV{}
+			err = proto.Unmarshal(item.Value, nsTask)
+			if err != nil {
+				return err, nil
+			}
+			return nil, construct(key, nsTask)
+		}
+	} else if tail != 0 {
+		gresp, err := a.db.Kv.Get(ctx, key, clientv3.WithPrefix(),
+			clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend), clientv3.WithLimit(tail))
+		if err != nil {
+			return err, nil
+		}
+		for _, item := range gresp.Kvs {
+			nsTask := &rPb.KV{}
+			err = proto.Unmarshal(item.Value, nsTask)
+			if err != nil {
+				return err, nil
+			}
+			return nil, construct(key, nsTask)
+		}
+	}
+	return errors.New("Cant use hand and tail at the same time!"), nil
+}
+
+func (a *Actions) getFT(ctx context.Context, key string, from, to int64) (error, *cPb.Data) {
+	data := &cPb.Data{Data: map[string]string{}}
+	gresp, err := a.db.Kv.Get(ctx, key,
+		clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
 		return err, nil
 	}
@@ -36,31 +91,79 @@ func (a *Actions) get(ctx context.Context, key string) (error, *cPb.Data) {
 		data.Data["clusterid"] = keyParts[2]
 		data.Data["nodeid"] = keyParts[3]
 
-		configs := []string{}
+		actions := []string{}
 		for k, v := range nsTask.Extras {
 			kv := strings.Join([]string{k, v}, ":")
-			configs = append(configs, kv)
+			if from != 0 && to != 0 {
+				if nsTask.Timestamp >= from && nsTask.Timestamp <= to {
+					actions = append(actions, kv)
+				}
+			} else if from != 0 && to == 0 {
+				if nsTask.Timestamp >= from {
+					actions = append(actions, kv)
+				}
+			} else if from == 0 && to != 0 {
+				if nsTask.Timestamp <= to {
+					actions = append(actions, kv)
+				}
+			} else {
+				actions = append(actions, kv)
+			}
 		}
-		data.Data["configs"] = strings.Join(configs, ",")
-
-		return nil, data
+		if val, ok := data.Data["actions"]; ok {
+			newVal := strings.Join(actions, ",")
+			data.Data["actions"] = strings.Join([]string{val, newVal}, ",")
+		} else {
+			data.Data["actions"] = strings.Join(actions, ",")
+		}
+		data.Data["timestamp"] = strconv.FormatInt(nsTask.Timestamp, 10)
 	}
-	return err, nil
+	return nil, data
+}
+
+func getExtras(extras map[string]string) (int64, int64, int64, int64) {
+	head := int64(0)
+	tail := int64(0)
+	from := int64(0)
+	to := int64(0)
+
+	if val, ok := extras["head"]; ok {
+		head, _ = strconv.ParseInt(val, 10, 64)
+	}
+
+	if val, ok := extras["tail"]; ok {
+		tail, _ = strconv.ParseInt(val, 10, 64)
+	}
+
+	if val, ok := extras["from"]; ok {
+		from, _ = strconv.ParseInt(val, 10, 64)
+	}
+
+	if val, ok := extras["to"]; ok {
+		to, _ = strconv.ParseInt(val, 10, 64)
+	}
+
+	return head, tail, from, to
+}
+
+func (a *Actions) get(ctx context.Context, key string, head, tail, from, to int64) (error, *cPb.Data) {
+	if head != 0 || tail != 0 {
+		return a.getHT(ctx, key, head, tail)
+	}
+	return a.getFT(ctx, key, from, to)
 }
 
 func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
 	cmp := extras["compare"]
 	els := strings.Split(extras["labels"], ",")
 	sort.Strings(els)
-
-	// top := 0
-	// from := 0
-	// to := 0
+	head, tail, from, to := getExtras(extras)
 
 	datas := []*cPb.Data{}
 	searchLabelsKey := helper.JoinParts("", "topology", "labels")
 	gresp, err := a.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
+		fmt.Println("gresp err ", err)
 		return err, nil
 	}
 	for _, item := range gresp.Kvs {
@@ -71,7 +174,7 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 		switch cmp {
 		case "all":
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				gerr, data := a.get(ctx, newKey)
+				gerr, data := a.get(ctx, newKey, head, tail, from, to)
 				if gerr != nil {
 					continue
 				}
@@ -79,7 +182,7 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 			}
 		case "any":
 			if helper.Compare(ls, els, false) {
-				gerr, data := a.get(ctx, newKey)
+				gerr, data := a.get(ctx, newKey, head, tail, from, to)
 				if gerr != nil {
 					continue
 				}
@@ -197,7 +300,7 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	}
 	for _, item := range gresp.Kvs {
 		keyPart := strings.Join(strings.Split(string(item.Key), "/labels/"), "/")
-		newKey := helper.Join(keyPart, "actions")
+		newKey := helper.JoinFull(keyPart, "actions", strconv.FormatInt(task.Timestamp, 10)) // add timestamp at the end of the key, actions are grouped by time
 
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)

@@ -30,8 +30,6 @@ func New(endpoints []string, timeout time.Duration) (*DB, error) {
 
 func (db *DB) Close() { db.Client.Close() }
 
-func (db *DB) Secrets() storage.Secrets { return &Secrets{db} }
-
 func (db *DB) Configs() storage.Configs { return &Configs{db} }
 
 func (db *DB) Actions() storage.Actions { return &Actions{db} }

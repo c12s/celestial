@@ -9,6 +9,7 @@ type Config struct {
 	Address        string       `yaml:"address"`
 	ClientConf     ClientConfig `yaml:"client"`
 	Endpoints      []string     `yaml:"db"`
+	SEndpoints     []string     `yaml:"sdb"`
 	DialTimeout    int          `yaml:"dialtimeout"`
 	RequestTimeout int          `yaml:"requesttimeout"`
 }

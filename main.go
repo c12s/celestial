@@ -4,6 +4,7 @@ import (
 	"github.com/c12s/celestial/model/config"
 	"github.com/c12s/celestial/service"
 	"github.com/c12s/celestial/storage/etcd"
+	"github.com/c12s/celestial/storage/vault"
 	"log"
 	"time"
 )
@@ -22,6 +23,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	//Load secrets database
+	sdb, err := vault.New(conf.SEndpoints, 10*time.Second)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	//Start Server
-	service.Run(db, conf.Address)
+	service.Run(db, sdb, conf.Address)
 }

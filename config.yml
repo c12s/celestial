@@ -1,6 +1,8 @@
 celestial:
   version: v1
   address: localhost:8000
+  sdb:
+      - 0.0.0.0:2379
   db:
       - 0.0.0.0:2379
   client:

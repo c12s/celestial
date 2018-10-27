@@ -32,8 +32,11 @@ func construct(key string, nsTask *rPb.KV) *cPb.Data {
 		kv := strings.Join([]string{k, v}, ":")
 		actions = append(actions, kv)
 	}
-	data.Data["actions"] = strings.Join(actions, ",")
-	data.Data["timestamp"] = strconv.FormatInt(nsTask.Timestamp, 10)
+	// actions = append(actions, strings.Join(nsTask.Index, ","))
+
+	timestamp := strconv.FormatInt(nsTask.Timestamp, 10)
+	tkey := strings.Join([]string{"timestamp", timestamp}, "_")
+	data.Data[tkey] = strings.Join(actions, ",")
 
 	return data
 }
@@ -110,13 +113,12 @@ func (a *Actions) getFT(ctx context.Context, key string, from, to int64) (error,
 				actions = append(actions, kv)
 			}
 		}
-		if val, ok := data.Data["actions"]; ok {
-			newVal := strings.Join(actions, ",")
-			data.Data["actions"] = strings.Join([]string{val, newVal}, ",")
-		} else {
-			data.Data["actions"] = strings.Join(actions, ",")
-		}
-		data.Data["timestamp"] = strconv.FormatInt(nsTask.Timestamp, 10)
+		// actions = append(actions, strings.Join(nsTask.Index, ","))
+
+		timestamp := strconv.FormatInt(nsTask.Timestamp, 10)
+		tkey := strings.Join([]string{"timestamp", timestamp}, "_")
+		data.Data[tkey] = strings.Join(actions, ",")
+		data.Data["index"] = strings.Join(nsTask.Index, ",")
 	}
 	return nil, data
 }
@@ -178,7 +180,9 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 				if gerr != nil {
 					continue
 				}
-				datas = append(datas, data)
+				if len(data.Data) > 0 {
+					datas = append(datas, data)
+				}
 			}
 		case "any":
 			if helper.Compare(ls, els, false) {
@@ -186,7 +190,9 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 				if gerr != nil {
 					continue
 				}
-				datas = append(datas, data)
+				if len(data.Data) > 0 {
+					datas = append(datas, data)
+				}
 			}
 		}
 	}
@@ -227,6 +233,7 @@ func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*b
 		actions.Index = payload.Index
 	}
 	actions.Timestamp = helper.Timestamp() // add a timestamp. Actoins are grouped by time!
+	fmt.Println(actions.Index)
 
 	// Save node actions
 	aData, aerr := proto.Marshal(actions)

@@ -7,7 +7,7 @@ import (
 )
 
 type DB struct {
-	Client *api.Client
+	client *api.Client
 }
 
 func New(endpoints []string, timeout time.Duration) (*DB, error) {
@@ -19,10 +19,18 @@ func New(endpoints []string, timeout time.Duration) (*DB, error) {
 	}
 
 	return &DB{
-		Client: cli,
+		client: cli,
 	}, nil
+}
+
+func (db *DB) init(token string) {
+	db.client.SetToken(token)
+}
+
+func (db *DB) revert() {
+	db.client.SetToken("")
 }
 
 func (db *DB) Close() {}
 
-func (db *DB) Secrets() storage.Secrets { return &Secrets{db} }
+func (db *DB) SSecrets() storage.SSecrets { return &SSecrets{db} }

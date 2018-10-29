@@ -2,14 +2,13 @@ package storage
 
 import (
 	"context"
-	cPb "github.com/c12s/scheme/celestial"
 )
 
 type SecretsDB interface {
-	Secrets() Secrets
+	SSecrets() SSecrets
 }
 
-type Secrets interface {
-	List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp)
-	Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp)
+type SSecrets interface {
+	List(ctx context.Context, path string) (error, map[string]string)
+	Mutate(ctx context.Context, key string, req map[string]interface{}) (error, string)
 }

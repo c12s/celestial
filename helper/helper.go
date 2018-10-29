@@ -87,10 +87,13 @@ func SplitLabels(value string) []string {
 /*
 topology/labels/regionid/clusterid/nodeid -> [k:v, k:v]
 topology/regionid/clusterid/nodes/nodeid -> {stats}
-topology/regionid/clusterid/nodeid/undone -> [k:v, k:v] unpushed artifacts
 topology/regionid/clusterid/nodeid/configs -> {config list with status}
 topology/regionid/clusterid/nodeid/secrets -> {secrets list with status} [ecnrypted]
 topology/regionid/clusterid/nodeid/actions/timestamp -> {actions list history with status}
+
+topology/regionid/clusterid/nodeid/undone/secrets -> [k:v, k:v] unpushed artifacts
+topology/regionid/clusterid/nodeid/undone/configs -> [k:v, k:v] unpushed artifacts
+topology/regionid/clusterid/nodeid/undone/actions -> [k:v, k:v] unpushed artifacts
 */
 
 // topology/regionid/clusterid/nodeid -> [k:v, k:v]
@@ -117,8 +120,14 @@ func SearchACSLabelsKey(rid, cid string) string {
 	return strings.Join(s, "/")
 }
 
-// topology/regionid/clusterid/nodeid/undone
-func ACSUndoneKey(key string) string {
+// topology/regionid/clusterid/nodeid/undone/artifact {secrets | configs | actions}
+func ACSUndoneKey(key, artifact string) string {
+	s := []string{key, undone, artifact}
+	return strings.Join(s, "/")
+}
+
+// topology/regionid/clusterid/nodeid/undone/artifact {secrets | configs | actions}
+func ACSUndoneKeyPrefix(key string) string {
 	s := []string{key, undone}
 	return strings.Join(s, "/")
 }

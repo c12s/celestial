@@ -247,33 +247,27 @@ func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*b
 	}
 
 	// Add stuff to undone section
-	uKey := helper.ACSUndoneKey(keyPart)
+	uKey := helper.ACSUndoneKey(keyPart, "actions")
 	uresp, cerr := a.db.Kv.Get(ctx, uKey)
 	if cerr != nil {
 		return cerr
 	}
 
 	for _, uitem := range uresp.Kvs {
-		undone := &rPb.UndoneKV{}
+		undone := &rPb.KV{}
 		cerr = proto.Unmarshal(uitem.Value, undone)
 		if cerr != nil {
 			return cerr
 		}
 
-		if undone.Undone == nil {
-			undone.Undone = map[string]*rPb.KV{}
-			undone.Undone["actions"] = &rPb.KV{Extras: map[string]string{}}
-		} else if _, ok := undone.Undone["actions"]; !ok {
-			undone.Undone["actions"] = &rPb.KV{Extras: map[string]string{}}
+		if undone.Extras == nil {
+			undone.Extras = map[string]string{}
 		}
 
 		// update undone with new stuff thats been added/removed/upddated
 		for k, v := range actions.Extras {
-			undone.Undone["actions"].Extras[k] = v
+			undone.Extras[k] = v
 		}
-
-		//save index
-		undone.Undone["actions"].Index = actions.Index
 
 		uData, uerr := proto.Marshal(undone)
 		if uerr != nil {

@@ -12,14 +12,13 @@ import (
 )
 
 type Server struct {
-	db  storage.DB
-	sdb storage.SecretsDB
+	db storage.DB
 }
 
 func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, error) {
 	switch req.Kind {
 	case cPb.ReqKind_SECRETS:
-		err, resp := s.sdb.Secrets().List(ctx, req.Extras)
+		err, resp := s.db.Secrets().List(ctx, req.Extras)
 		if err != nil {
 			return nil, err
 		}
@@ -49,7 +48,7 @@ func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, err
 func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateResp, error) {
 	switch req.Mutate.Kind {
 	case bPb.TaskKind_SECRETS:
-		err, resp := s.sdb.Secrets().Mutate(ctx, req)
+		err, resp := s.db.Secrets().Mutate(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -76,7 +75,7 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 	return &cPb.MutateResp{Error: "Not valid file type"}, nil
 }
 
-func Run(db storage.DB, sdb storage.SecretsDB, address string) {
+func Run(db storage.DB, address string) {
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Fatalf("failed to initializa TCP listen: %v", err)
@@ -85,8 +84,7 @@ func Run(db storage.DB, sdb storage.SecretsDB, address string) {
 
 	server := grpc.NewServer()
 	celestialServer := &Server{
-		db:  db,
-		sdb: sdb,
+		db: db,
 	}
 
 	fmt.Println("Celestial RPC Started")

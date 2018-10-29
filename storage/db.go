@@ -6,6 +6,7 @@ import (
 )
 
 type DB interface {
+	Secrets() Secrets
 	Configs() Configs
 	Actions() Actions
 	Namespaces() Namespaces
@@ -22,6 +23,11 @@ type Actions interface {
 }
 
 type Namespaces interface {
+	List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp)
+	Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp)
+}
+
+type Secrets interface {
 	List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp)
 	Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp)
 }

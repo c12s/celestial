@@ -13,10 +13,6 @@ import (
 	"strings"
 )
 
-const (
-	Tombstone = "!!Tombstone"
-)
-
 type Configs struct {
 	db *DB
 }
@@ -142,29 +138,26 @@ func (c *Configs) mutate(ctx context.Context, key, keyPart string, payloads []*b
 	}
 
 	// Add stuff to undone section
-	uKey := helper.ACSUndoneKey(keyPart)
+	uKey := helper.ACSUndoneKey(keyPart, "configs")
 	uresp, cerr := c.db.Kv.Get(ctx, uKey)
 	if cerr != nil {
 		return cerr
 	}
 
 	for _, uitem := range uresp.Kvs {
-		undone := &rPb.UndoneKV{}
+		undone := &rPb.KV{}
 		cerr = proto.Unmarshal(uitem.Value, undone)
 		if cerr != nil {
 			return cerr
 		}
 
-		if undone.Undone == nil {
-			undone.Undone = map[string]*rPb.KV{}
-			undone.Undone["configs"] = &rPb.KV{Extras: map[string]string{}}
-		} else if _, ok := undone.Undone["actions"]; !ok {
-			undone.Undone["configs"] = &rPb.KV{Extras: map[string]string{}}
+		if undone.Extras == nil {
+			undone.Extras = map[string]string{}
 		}
 
 		// update undone with new stuff thats been added/removed/upddated
 		for k, v := range configs.Extras {
-			undone.Undone["configs"].Extras[k] = v
+			undone.Extras[k] = v
 		}
 
 		uData, uerr := proto.Marshal(undone)

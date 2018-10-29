@@ -1,7 +1,9 @@
 package etcd
 
 import (
+	"github.com/c12s/celestial/model/config"
 	"github.com/c12s/celestial/storage"
+	"github.com/c12s/celestial/storage/vault"
 	"github.com/coreos/etcd/clientv3"
 	"time"
 )
@@ -9,14 +11,21 @@ import (
 type DB struct {
 	Kv     clientv3.KV
 	Client *clientv3.Client
+	sdb    storage.SecretsDB
 }
 
-func New(endpoints []string, timeout time.Duration) (*DB, error) {
+func New(conf *config.Config, timeout time.Duration) (*DB, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		DialTimeout: timeout,
-		Endpoints:   endpoints,
+		Endpoints:   conf.Endpoints,
 	})
 
+	if err != nil {
+		return nil, err
+	}
+
+	//Load secrets database
+	sdb, err := vault.New(conf.SEndpoints, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -25,10 +34,13 @@ func New(endpoints []string, timeout time.Duration) (*DB, error) {
 	return &DB{
 		Kv:     kv,
 		Client: cli,
+		sdb:    sdb,
 	}, nil
 }
 
 func (db *DB) Close() { db.Client.Close() }
+
+func (db *DB) Secrets() storage.Secrets { return &Secrets{db} }
 
 func (db *DB) Configs() storage.Configs { return &Configs{db} }
 

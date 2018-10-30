@@ -9,6 +9,6 @@ type SecretsDB interface {
 }
 
 type SSecrets interface {
-	List(ctx context.Context, path string) (error, map[string]string)
-	Mutate(ctx context.Context, key string, req map[string]interface{}) (error, string)
+	List(ctx context.Context, path, user string) (error, map[string]string)
+	Mutate(ctx context.Context, key, user string, req map[string]interface{}) (error, string)
 }

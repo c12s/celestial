@@ -1,6 +1,7 @@
 celestial:
   version: v1
   address: localhost:8000
+  apollo: localhost:8083
   sdb:
       - http://0.0.0.0:8200
   db:

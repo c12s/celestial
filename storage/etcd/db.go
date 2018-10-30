@@ -25,7 +25,7 @@ func New(conf *config.Config, timeout time.Duration) (*DB, error) {
 	}
 
 	//Load secrets database
-	sdb, err := vault.New(conf.SEndpoints, timeout)
+	sdb, err := vault.New(conf.SEndpoints, timeout, conf.Apollo)
 	if err != nil {
 		return nil, err
 	}

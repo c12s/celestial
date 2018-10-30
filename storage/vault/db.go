@@ -7,10 +7,11 @@ import (
 )
 
 type DB struct {
-	client *api.Client
+	client        *api.Client
+	apolloAddress string
 }
 
-func New(endpoints []string, timeout time.Duration) (*DB, error) {
+func New(endpoints []string, timeout time.Duration, apolloService string) (*DB, error) {
 	cli, err := api.NewClient(&api.Config{
 		Address: endpoints[0],
 	})
@@ -19,7 +20,8 @@ func New(endpoints []string, timeout time.Duration) (*DB, error) {
 	}
 
 	return &DB{
-		client: cli,
+		client:        cli,
+		apolloAddress: apolloService,
 	}, nil
 }
 
@@ -28,7 +30,7 @@ func (db *DB) init(token string) {
 }
 
 func (db *DB) revert() {
-	db.client.SetToken("")
+	db.client.ClearToken()
 }
 
 func (db *DB) Close() {}

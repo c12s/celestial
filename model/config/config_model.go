@@ -7,6 +7,7 @@ type Celestial struct {
 type Config struct {
 	ConfVersion    string       `yaml:"version"`
 	Address        string       `yaml:"address"`
+	Apollo         string       `yaml:"apollo"`
 	ClientConf     ClientConfig `yaml:"client"`
 	Endpoints      []string     `yaml:"db"`
 	SEndpoints     []string     `yaml:"sdb"`

@@ -233,7 +233,6 @@ func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*b
 		actions.Index = payload.Index
 	}
 	actions.Timestamp = helper.Timestamp() // add a timestamp. Actoins are grouped by time!
-	fmt.Println(actions.Index)
 
 	// Save node actions
 	aData, aerr := proto.Marshal(actions)

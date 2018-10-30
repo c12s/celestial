@@ -2,6 +2,8 @@ package vault
 
 import (
 	"context"
+	"github.com/c12s/celestial/service"
+	aPb "github.com/c12s/scheme/apollo"
 	"strings"
 )
 
@@ -19,8 +21,22 @@ func formatKey(path string) string {
 	return strings.Join(s, "/")
 }
 
-func (s *SSecrets) List(ctx context.Context, key string) (error, map[string]string) {
-	s.db.init("myroot")
+func (s *SSecrets) getToken(ctx context.Context, user string) (error, string) {
+	client := service.NewApolloClient(s.db.apolloAddress)
+	resp, err := client.GetToken(ctx, &aPb.GetReq{user})
+	if err != nil {
+		return err, ""
+	}
+	return nil, resp.Token
+}
+
+func (s *SSecrets) List(ctx context.Context, key, user string) (error, map[string]string) {
+	uerr, userId := s.getToken(ctx, user)
+	if uerr != nil {
+		return uerr, nil
+	}
+
+	s.db.init(userId)
 	defer s.db.revert()
 
 	retVal := map[string]string{}
@@ -38,8 +54,13 @@ func (s *SSecrets) List(ctx context.Context, key string) (error, map[string]stri
 	return nil, retVal
 }
 
-func (s *SSecrets) Mutate(ctx context.Context, key string, req map[string]interface{}) (error, string) {
-	s.db.init("myroot")
+func (s *SSecrets) Mutate(ctx context.Context, key, user string, req map[string]interface{}) (error, string) {
+	uerr, userId := s.getToken(ctx, user)
+	if uerr != nil {
+		return uerr, ""
+	}
+
+	s.db.init(userId)
 	defer s.db.revert()
 
 	path := formatKey(key)

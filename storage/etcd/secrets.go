@@ -17,9 +17,9 @@ type Secrets struct {
 	db *DB
 }
 
-func (n *Secrets) get(ctx context.Context, key string) (error, *cPb.Data) {
+func (n *Secrets) get(ctx context.Context, key, user string) (error, *cPb.Data) {
 	data := &cPb.Data{Data: map[string]string{}}
-	err, resp := n.db.sdb.SSecrets().List(ctx, key)
+	err, resp := n.db.sdb.SSecrets().List(ctx, key, user)
 	if err != nil {
 		return err, nil
 	}
@@ -41,6 +41,7 @@ func (n *Secrets) get(ctx context.Context, key string) (error, *cPb.Data) {
 func (s *Secrets) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
 	cmp := extras["compare"]
 	els := strings.Split(extras["labels"], ",")
+	userId := extras["user"]
 	sort.Strings(els)
 
 	datas := []*cPb.Data{}
@@ -57,7 +58,7 @@ func (s *Secrets) List(ctx context.Context, extras map[string]string) (error, *c
 		switch cmp {
 		case "all":
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				gerr, data := s.get(ctx, newKey)
+				gerr, data := s.get(ctx, newKey, userId)
 				if gerr != nil {
 					continue
 				}
@@ -65,7 +66,7 @@ func (s *Secrets) List(ctx context.Context, extras map[string]string) (error, *c
 			}
 		case "any":
 			if helper.Compare(ls, els, false) {
-				gerr, data := s.get(ctx, newKey)
+				gerr, data := s.get(ctx, newKey, userId)
 				if gerr != nil {
 					continue
 				}
@@ -90,14 +91,16 @@ func conv(in map[string]string) map[string]interface{} {
 key -> topology/regionid/clusterid/nodes/nodeid/secrets
 keyPart -> topology/regionid/clusterid/nodes/nodeid to create keyPart/undone
 */
-func (s *Secrets) mutate(ctx context.Context, key, keyPart string, payloads []*bPb.Payload) error {
-	sData := ""
+func (s *Secrets) mutate(ctx context.Context, key, keyPart, user string, payloads []*bPb.Payload) error {
+	input := map[string]interface{}{}
 	for _, payload := range payloads {
-		err, temp := s.db.sdb.SSecrets().Mutate(ctx, key, conv(payload.Value))
-		if err != nil {
-			return err
+		for k, v := range payload.Value {
+			input[k] = v
 		}
-		sData = temp
+	}
+	err, sData := s.db.sdb.SSecrets().Mutate(ctx, key, user, input)
+	if err != nil {
+		return err
 	}
 
 	if sData != "" {
@@ -158,14 +161,14 @@ func (c *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 		switch task.Task.Selector.Kind {
 		case bPb.CompareKind_ALL:
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				err = c.mutate(ctx, newKey, keyPart, task.Task.Payload)
+				err = c.mutate(ctx, newKey, keyPart, task.UserId, task.Task.Payload)
 				if err != nil {
 					return err, nil
 				}
 			}
 		case bPb.CompareKind_ANY:
 			if helper.Compare(ls, els, false) {
-				err = c.mutate(ctx, newKey, keyPart, task.Task.Payload)
+				err = c.mutate(ctx, newKey, keyPart, task.UserId, task.Task.Payload)
 				if err != nil {
 					return err, nil
 				}

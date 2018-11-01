@@ -90,8 +90,8 @@ func SplitLabels(value string) []string {
 TODO: **MAYBE** NEW KEY SPACE
 topology/regions/labels/regionid/clusterid/nodeid -> [k:v, k:v]
 topology/regions/regionid/clusterid/nodes/nodeid -> {stats}
-topology/regions/configs/regionid/clusterid/nodeid -> {config list with status}
-topology/regions/secrets/regionid/clusterid/nodeid -> {secrets list with status} [ecnrypted]
+topology/regions/configs/regionid/clusterid/nodeid/timestamp -> {config list with status}
+topology/regions/secrets/regionid/clusterid/nodeid/timestamp -> {secrets list with status}
 topology/regions/actions/regionid/clusterid/nodeid/timestamp -> {actions list history with status}
 */
 

@@ -3,14 +3,12 @@ package etcd
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/c12s/celestial/helper"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
 	rPb "github.com/c12s/scheme/core"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -29,7 +27,7 @@ func construct(key string, nsTask *rPb.KV) *cPb.Data {
 
 	actions := []string{}
 	for k, v := range nsTask.Extras {
-		kv := strings.Join([]string{k, v}, ":")
+		kv := strings.Join([]string{k, v.Value}, ":")
 		actions = append(actions, kv)
 	}
 	// actions = append(actions, strings.Join(nsTask.Index, ","))
@@ -96,7 +94,7 @@ func (a *Actions) getFT(ctx context.Context, key string, from, to int64) (error,
 
 		actions := []string{}
 		for k, v := range nsTask.Extras {
-			kv := strings.Join([]string{k, v}, ":")
+			kv := strings.Join([]string{k, v.Value}, ":")
 			if from != 0 && to != 0 {
 				if nsTask.Timestamp >= from && nsTask.Timestamp <= to {
 					actions = append(actions, kv)
@@ -156,22 +154,19 @@ func (a *Actions) get(ctx context.Context, key string, head, tail, from, to int6
 }
 
 func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
+	searchLabelsKey := helper.JoinParts("", "topology", "regions", "labels") // -> topology/regions/labels => search key
+	gresp, err := a.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	if err != nil {
+		return err, nil
+	}
+
 	cmp := extras["compare"]
-	els := strings.Split(extras["labels"], ",")
-	sort.Strings(els)
+	els := helper.SplitLabels(extras["labels"])
 	head, tail, from, to := getExtras(extras)
 
 	datas := []*cPb.Data{}
-	searchLabelsKey := helper.JoinParts("", "topology", "labels")
-	gresp, err := a.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
-	if err != nil {
-		fmt.Println("gresp err ", err)
-		return err, nil
-	}
 	for _, item := range gresp.Kvs {
-		keyPart := strings.Join(strings.Split(string(item.Key), "/labels/"), "/")
-		newKey := helper.Join(keyPart, "actions")
-
+		newKey := helper.Key(string(item.Key), "configs")
 		ls := helper.SplitLabels(string(item.Value))
 		switch cmp {
 		case "all":
@@ -199,11 +194,8 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 	return nil, &cPb.ListResp{Data: datas}
 }
 
-/*
-key -> topology/regionid/clusterid/nodes/nodeid/configs
-keyPart -> topology/regionid/clusterid/nodes/nodeid to create keyPart/undone
-*/
-func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*bPb.Payload) error {
+// key -> topology/regions/actions/regionid/clusterid/nodes/nodeid
+func (a *Actions) mutate(ctx context.Context, key, userId string, payloads []*bPb.Payload) error {
 	cresp, cerr := a.db.Kv.Get(ctx, key)
 	if cerr != nil {
 		return cerr
@@ -218,7 +210,7 @@ func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*b
 		}
 	}
 	if actions.Extras == nil {
-		actions.Extras = map[string]string{}
+		actions.Extras = map[string]*rPb.KVData{}
 	}
 
 	// Than test if submited configs exits or not.
@@ -228,11 +220,12 @@ func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*b
 	// WHEN WORKING WITH ACTIONS WE NEED TO PRESEVER ACTIONS ORDER!
 	for _, payload := range payloads {
 		for _, index := range payload.Index {
-			actions.Extras[index] = payload.Value[index]
+			actions.Extras[index] = &rPb.KVData{payload.Value[index], "Waiting"}
 		}
 		actions.Index = payload.Index
 	}
 	actions.Timestamp = helper.Timestamp() // add a timestamp. Actoins are grouped by time!
+	actions.UserId = userId
 
 	// Save node actions
 	aData, aerr := proto.Marshal(actions)
@@ -249,15 +242,9 @@ func (a *Actions) mutate(ctx context.Context, key, keyPart string, payloads []*b
 
 func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
 	task := req.Mutate
-	searchLabelsKey := ""
-	if task.Task.RegionId == "*" && task.Task.ClusterId == "*" {
-		searchLabelsKey = helper.JoinParts("", "topology", "labels") // topology/labels/
-	} else if task.Task.RegionId != "*" && task.Task.ClusterId == "*" {
-		searchLabelsKey = helper.JoinParts("", "topology", "labels", task.Task.RegionId) //topology/labels/regionid/
-	} else if task.Task.RegionId != "*" && task.Task.ClusterId != "*" { //topology/labels/regionid/clusterid/
-		searchLabelsKey = helper.JoinParts("", "topology", "labels", task.Task.RegionId, task.Task.ClusterId)
-	} else {
-		return errors.New("Request not valid"), nil
+	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
+	if kerr != nil {
+		return kerr, nil
 	}
 
 	gresp, err := a.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
@@ -265,23 +252,22 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 		return err, nil
 	}
 	for _, item := range gresp.Kvs {
-		keyPart := strings.Join(strings.Split(string(item.Key), "/labels/"), "/")
-		newKey := helper.JoinFull(keyPart, "actions", strconv.FormatInt(task.Timestamp, 10)) // add timestamp at the end of the key, actions are grouped by time
-
+		key := helper.Key(string(item.Key), "actions")
+		newKey := helper.Join(key, strconv.FormatInt(task.Timestamp, 10))
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)
 
 		switch task.Task.Selector.Kind {
 		case bPb.CompareKind_ALL:
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				err = a.mutate(ctx, newKey, keyPart, task.Task.Payload)
+				err = a.mutate(ctx, newKey, task.UserId, task.Task.Payload)
 				if err != nil {
 					return err, nil
 				}
 			}
 		case bPb.CompareKind_ANY:
 			if helper.Compare(ls, els, false) {
-				err = a.mutate(ctx, newKey, keyPart, task.Task.Payload)
+				err = a.mutate(ctx, newKey, task.UserId, task.Task.Payload)
 				if err != nil {
 					return err, nil
 				}

@@ -2,12 +2,15 @@ package etcd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/c12s/celestial/helper"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
 	rPb "github.com/c12s/scheme/core"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
+	"strconv"
 	"strings"
 )
 
@@ -16,13 +19,18 @@ type Configs struct {
 }
 
 func (n *Configs) get(ctx context.Context, key string) (error, *cPb.Data) {
-	gresp, err := n.db.Kv.Get(ctx, key)
+	gresp, err := n.db.Kv.Get(ctx, key, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
 		return err, nil
 	}
 
+	if len(gresp.Kvs) == 0 {
+		return errors.New("Empty"), nil
+	}
+
 	data := &cPb.Data{Data: map[string]string{}}
 	for _, item := range gresp.Kvs {
+		fmt.Println(string(item.Key))
 		nsTask := &rPb.KV{}
 		err = proto.Unmarshal(item.Value, nsTask)
 		if err != nil {
@@ -36,13 +44,12 @@ func (n *Configs) get(ctx context.Context, key string) (error, *cPb.Data) {
 
 		configs := []string{}
 		for k, v := range nsTask.Extras {
-			kv := strings.Join([]string{k, v}, ":")
+			kv := strings.Join([]string{k, v.Value}, ":")
 			configs = append(configs, kv)
 		}
 		data.Data["configs"] = strings.Join(configs, ",")
-		return nil, data
 	}
-	return err, nil
+	return nil, data
 }
 
 func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
@@ -82,7 +89,7 @@ func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *c
 }
 
 // key -> topology/regions/configs/regionid/clusterid/nodes/nodeid
-func (c *Configs) mutate(ctx context.Context, key string, payloads []*bPb.Payload) error {
+func (c *Configs) mutate(ctx context.Context, key, userId string, payloads []*bPb.Payload) error {
 	cresp, cerr := c.db.Kv.Get(ctx, key)
 	if cerr != nil {
 		return cerr
@@ -97,7 +104,7 @@ func (c *Configs) mutate(ctx context.Context, key string, payloads []*bPb.Payloa
 		}
 	}
 	if configs.Extras == nil {
-		configs.Extras = map[string]string{}
+		configs.Extras = map[string]*rPb.KVData{}
 	}
 
 	// Than test if submited configs exits or not.
@@ -108,15 +115,17 @@ func (c *Configs) mutate(ctx context.Context, key string, payloads []*bPb.Payloa
 		for pk, pv := range payload.Value {
 			if _, ok := configs.Extras[pk]; ok {
 				if pv == Tombstone {
-					configs.Extras[pk] = Tombstone
+					configs.Extras[pk] = &rPb.KVData{Tombstone, "Waiting"}
 				} else {
-					configs.Extras[pk] = pv
+					configs.Extras[pk] = &rPb.KVData{pv, "Waiting"}
 				}
 			} else {
-				configs.Extras[pk] = pv
+				configs.Extras[pk] = &rPb.KVData{pv, "Waiting"}
 			}
 		}
 	}
+	configs.Timestamp = helper.Timestamp()
+	configs.UserId = userId
 
 	// Save node configs
 	cData, serr := proto.Marshal(configs)
@@ -142,23 +151,23 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	if err != nil {
 		return err, nil
 	}
-
 	for _, item := range gresp.Kvs {
-		newKey := helper.Key(string(item.Key), "configs")
+		key := helper.Key(string(item.Key), "configs")
+		newKey := helper.Join(key, strconv.FormatInt(task.Timestamp, 10))
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)
 
 		switch task.Task.Selector.Kind {
 		case bPb.CompareKind_ALL:
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				err = c.mutate(ctx, newKey, task.Task.Payload)
+				err = c.mutate(ctx, newKey, task.UserId, task.Task.Payload)
 				if err != nil {
 					return err, nil
 				}
 			}
 		case bPb.CompareKind_ANY:
 			if helper.Compare(ls, els, false) {
-				err = c.mutate(ctx, newKey, task.Task.Payload)
+				err = c.mutate(ctx, newKey, task.UserId, task.Task.Payload)
 				if err != nil {
 					return err, nil
 				}

@@ -5,9 +5,10 @@ import (
 	"github.com/c12s/celestial/helper"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
-	// rPb "github.com/c12s/scheme/core"
+	rPb "github.com/c12s/scheme/core"
 	"github.com/coreos/etcd/clientv3"
-	// "github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/proto"
+	"strconv"
 	"strings"
 )
 
@@ -75,53 +76,63 @@ func (s *Secrets) List(ctx context.Context, extras map[string]string) (error, *c
 	return nil, nil
 }
 
-func conv(in map[string]string) map[string]interface{} {
-	out := map[string]interface{}{}
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
-
 // key -> topology/regions/secrets/regionid/clusterid/nodes/nodeid
-func (s *Secrets) mutate(ctx context.Context, key, user string, payloads []*bPb.Payload) error {
-	input := map[string]interface{}{}
-	for _, payload := range payloads {
-		for k, v := range payload.Value {
-			input[k] = v
+func (s *Secrets) mutate(ctx context.Context, key, userId string, payloads []*bPb.Payload) error {
+	sresp, serr := s.db.Kv.Get(ctx, key)
+	if serr != nil {
+		return serr
+	}
+
+	// Get what is current state of the configs for the node
+	secrets := &rPb.KV{}
+	for _, sitem := range sresp.Kvs {
+		serr = proto.Unmarshal(sitem.Value, secrets)
+		if serr != nil {
+			return serr
 		}
 	}
-	err, sData := s.db.sdb.SSecrets().Mutate(ctx, key, user, input)
+	if secrets.Extras == nil {
+		secrets.Extras = map[string]*rPb.KVData{}
+	}
+
+	input := map[string]interface{}{}
+	for _, payload := range payloads {
+		for pk, pv := range payload.Value {
+			if _, ok := secrets.Extras[pk]; ok {
+				if pv == Tombstone {
+					secrets.Extras[pk] = &rPb.KVData{Tombstone, "Waiting"}
+				} else {
+					secrets.Extras[pk] = &rPb.KVData{"", "Waiting"}
+				}
+			} else {
+				secrets.Extras[pk] = &rPb.KVData{"", "Waiting"}
+			}
+			input[pk] = pv
+		}
+	}
+	secrets.Timestamp = helper.Timestamp()
+	secrets.UserId = userId
+
+	err, sData := s.db.sdb.SSecrets().Mutate(ctx, key, userId, input)
 	if err != nil {
 		return err
 	}
 
 	if sData != "" {
-		_, serr := s.db.Kv.Put(ctx, key, sData)
+		for k, _ := range secrets.Extras {
+			secrets.Extras[k] = &rPb.KVData{sData, "Waiting"}
+		}
+
+		// Save node configs
+		sData, sserr := proto.Marshal(secrets)
+		if sserr != nil {
+			return sserr
+		}
+
+		_, serr = s.db.Kv.Put(ctx, key, string(sData))
 		if serr != nil {
 			return serr
 		}
-
-		// Add stuff to undone section
-		// uKey := helper.ACSUndoneKey(keyPart, "secrets")
-		// uresp, cerr := s.db.Kv.Get(ctx, uKey)
-		// if cerr != nil {
-		// 	return cerr
-		// }
-
-		// if len(uresp.Kvs) == 0 {
-		// 	extras := map[string]string{sData: user}
-		// 	undone := &rPb.KV{Extras: extras}
-		// 	uData, uerr := proto.Marshal(undone)
-		// 	if uerr != nil {
-		// 		return uerr
-		// 	}
-
-		// 	_, cerr = s.db.Kv.Put(ctx, uKey, string(uData))
-		// 	if cerr != nil {
-		// 		return cerr
-		// 	}
-		// }
 	}
 
 	return nil
@@ -139,7 +150,8 @@ func (c *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 		return err, nil
 	}
 	for _, item := range gresp.Kvs {
-		newKey := helper.Key(string(item.Key), "secrets")
+		key := helper.Key(string(item.Key), "secrets")
+		newKey := helper.Join(key, strconv.FormatInt(task.Timestamp, 10))
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)
 

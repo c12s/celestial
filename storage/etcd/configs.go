@@ -2,14 +2,12 @@ package etcd
 
 import (
 	"context"
-	"errors"
 	"github.com/c12s/celestial/helper"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
 	rPb "github.com/c12s/scheme/core"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
-	"sort"
 	"strings"
 )
 
@@ -18,12 +16,12 @@ type Configs struct {
 }
 
 func (n *Configs) get(ctx context.Context, key string) (error, *cPb.Data) {
-	data := &cPb.Data{Data: map[string]string{}}
 	gresp, err := n.db.Kv.Get(ctx, key)
 	if err != nil {
 		return err, nil
 	}
 
+	data := &cPb.Data{Data: map[string]string{}}
 	for _, item := range gresp.Kvs {
 		nsTask := &rPb.KV{}
 		err = proto.Unmarshal(item.Value, nsTask)
@@ -42,27 +40,24 @@ func (n *Configs) get(ctx context.Context, key string) (error, *cPb.Data) {
 			configs = append(configs, kv)
 		}
 		data.Data["configs"] = strings.Join(configs, ",")
-
 		return nil, data
 	}
 	return err, nil
 }
 
 func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
-	cmp := extras["compare"]
-	els := strings.Split(extras["labels"], ",")
-	sort.Strings(els)
-
-	datas := []*cPb.Data{}
-	searchLabelsKey := helper.JoinParts("", "topology", "labels")
+	searchLabelsKey := helper.JoinParts("", "topology", "regions", "labels") // -> topology/regions/labels => search key
 	gresp, err := c.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
 		return err, nil
 	}
-	for _, item := range gresp.Kvs {
-		keyPart := strings.Join(strings.Split(string(item.Key), "/labels/"), "/")
-		newKey := helper.Join(keyPart, "configs")
 
+	cmp := extras["compare"]
+	els := helper.SplitLabels(extras["labels"])
+
+	datas := []*cPb.Data{}
+	for _, item := range gresp.Kvs {
+		newKey := helper.Key(string(item.Key), "configs")
 		ls := helper.SplitLabels(string(item.Value))
 		switch cmp {
 		case "all":
@@ -86,11 +81,8 @@ func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *c
 	return nil, &cPb.ListResp{Data: datas}
 }
 
-/*
-key -> topology/regionid/clusterid/nodes/nodeid/configs
-keyPart -> topology/regionid/clusterid/nodes/nodeid to create keyPart/undone
-*/
-func (c *Configs) mutate(ctx context.Context, key, keyPart string, payloads []*bPb.Payload) error {
+// key -> topology/regions/configs/regionid/clusterid/nodes/nodeid
+func (c *Configs) mutate(ctx context.Context, key string, payloads []*bPb.Payload) error {
 	cresp, cerr := c.db.Kv.Get(ctx, key)
 	if cerr != nil {
 		return cerr
@@ -136,79 +128,37 @@ func (c *Configs) mutate(ctx context.Context, key, keyPart string, payloads []*b
 	if cerr != nil {
 		return cerr
 	}
-
-	// Add stuff to undone section
-	uKey := helper.ACSUndoneKey(keyPart, "configs")
-	uresp, cerr := c.db.Kv.Get(ctx, uKey)
-	if cerr != nil {
-		return cerr
-	}
-
-	for _, uitem := range uresp.Kvs {
-		undone := &rPb.KV{}
-		cerr = proto.Unmarshal(uitem.Value, undone)
-		if cerr != nil {
-			return cerr
-		}
-
-		if undone.Extras == nil {
-			undone.Extras = map[string]string{}
-		}
-
-		// update undone with new stuff thats been added/removed/upddated
-		for k, v := range configs.Extras {
-			undone.Extras[k] = v
-		}
-
-		uData, uerr := proto.Marshal(undone)
-		if uerr != nil {
-			return uerr
-		}
-
-		_, cerr = c.db.Kv.Put(ctx, uKey, string(uData))
-		if cerr != nil {
-			return cerr
-		}
-	}
-
 	return nil
 }
 
 func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
 	task := req.Mutate
-	searchLabelsKey := ""
-	if task.Task.RegionId == "*" && task.Task.ClusterId == "*" {
-		searchLabelsKey = helper.JoinParts("", "topology", "labels") // topology/labels/
-	} else if task.Task.RegionId != "*" && task.Task.ClusterId == "*" {
-		searchLabelsKey = helper.JoinParts("", "topology", "labels", task.Task.RegionId) //topology/labels/regionid/
-	} else if task.Task.RegionId != "*" && task.Task.ClusterId != "*" { //topology/labels/regionid/clusterid/
-		searchLabelsKey = helper.JoinParts("", "topology", "labels", task.Task.RegionId, task.Task.ClusterId)
-	} else {
-		return errors.New("Request not valid"), nil
+	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
+	if kerr != nil {
+		return kerr, nil
 	}
 
 	gresp, err := c.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
 		return err, nil
 	}
-	for _, item := range gresp.Kvs {
-		keyPart := strings.Join(strings.Split(string(item.Key), "/labels/"), "/")
-		newKey := helper.Join(keyPart, "configs")
 
+	for _, item := range gresp.Kvs {
+		newKey := helper.Key(string(item.Key), "configs")
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)
 
 		switch task.Task.Selector.Kind {
 		case bPb.CompareKind_ALL:
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				err = c.mutate(ctx, newKey, keyPart, task.Task.Payload)
+				err = c.mutate(ctx, newKey, task.Task.Payload)
 				if err != nil {
 					return err, nil
 				}
 			}
 		case bPb.CompareKind_ANY:
 			if helper.Compare(ls, els, false) {
-				err = c.mutate(ctx, newKey, keyPart, task.Task.Payload)
+				err = c.mutate(ctx, newKey, task.Task.Payload)
 				if err != nil {
 					return err, nil
 				}

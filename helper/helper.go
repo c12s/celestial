@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ const (
 	status     = "status"
 
 	topology = "topology"
+	regions  = "regions"
 	nodes    = "nodes"
 	actions  = "actions"
 	configs  = "configs"
@@ -85,71 +87,29 @@ func SplitLabels(value string) []string {
 }
 
 /*
-topology/labels/regionid/clusterid/nodeid -> [k:v, k:v]
-topology/regionid/clusterid/nodes/nodeid -> {stats}
-topology/regionid/clusterid/nodeid/configs -> {config list with status}
-topology/regionid/clusterid/nodeid/secrets -> {secrets list with status} [ecnrypted]
-topology/regionid/clusterid/nodeid/actions/timestamp -> {actions list history with status}
-
-topology/regionid/clusterid/nodeid/undone/secrets -> [k:v, k:v] unpushed artifacts
-topology/regionid/clusterid/nodeid/undone/configs -> [k:v, k:v] unpushed artifacts
-topology/regionid/clusterid/nodeid/undone/actions -> [k:v, k:v] unpushed artifacts
+TODO: **MAYBE** NEW KEY SPACE
+topology/regions/labels/regionid/clusterid/nodeid -> [k:v, k:v]
+topology/regions/regionid/clusterid/nodes/nodeid -> {stats}
+topology/regions/configs/regionid/clusterid/nodeid -> {config list with status}
+topology/regions/secrets/regionid/clusterid/nodeid -> {secrets list with status} [ecnrypted]
+topology/regions/actions/regionid/clusterid/nodeid/timestamp -> {actions list history with status}
 */
 
-// topology/regionid/clusterid/nodeid -> [k:v, k:v]
+// topology/regions/regionid/clusterid/nodeid -> [k:v, k:v]
 func ACSNodeKey(rid, cid, nid string) string {
-	s := []string{topology, rid, cid, nid}
+	s := []string{topology, regions, rid, cid, nid}
 	return strings.Join(s, "/")
 }
 
-// topology/regionid/clusterid/nodes
+// topology/regions/regionid/clusterid/nodes
 func ACSNodesKey(rid, cid string) string {
-	s := []string{topology, rid, cid, nodes}
+	s := []string{topology, regions, rid, cid, nodes}
 	return strings.Join(s, "/")
 }
 
-// topology/labels/regionid/clusterid/nodeid
+// topology/regions/labels/regionid/clusterid/nodeid
 func ACSLabelsKey(rid, cid, nid string) string {
-	s := []string{topology, labels, rid, cid, nid}
-	return strings.Join(s, "/")
-}
-
-// topology/regionid/clusterid/labels
-func SearchACSLabelsKey(rid, cid string) string {
-	s := []string{topology, rid, cid, labels}
-	return strings.Join(s, "/")
-}
-
-// topology/regionid/clusterid/nodeid/undone/artifact {secrets | configs | actions}
-func ACSUndoneKey(key, artifact string) string {
-	s := []string{key, undone, artifact}
-	return strings.Join(s, "/")
-}
-
-// topology/regionid/clusterid/nodeid/undone/artifact {secrets | configs | actions}
-func ACSUndoneKeyPrefix(key string) string {
-	s := []string{key, undone}
-	return strings.Join(s, "/")
-}
-
-// topology/regionid/clusterid/nodeid/actions
-func ANodeKey(rid, cid, nid string) string {
-	prefix := ACSNodeKey(rid, cid, nid)
-	s := []string{prefix, actions}
-	return strings.Join(s, "/")
-}
-
-// topology/regionid/clusterid/nodeid/configs
-func CNodeKey(rid, cid, nid string) string {
-	prefix := ACSNodeKey(rid, cid, nid)
-	s := []string{prefix, configs}
-	return strings.Join(s, "/")
-}
-
-// topology/regionid/clusterid/nodeid/secrets
-func SNodeKey(rid, cid, nid string) string {
-	prefix := ACSNodeKey(rid, cid, nid)
-	s := []string{prefix, secrets}
+	s := []string{topology, regions, labels, rid, cid, nid}
 	return strings.Join(s, "/")
 }
 
@@ -182,4 +142,21 @@ func JoinFull(parts ...string) string {
 
 func Timestamp() int64 {
 	return time.Now().Unix()
+}
+
+// from: topology/regions/labels/regionid/clusterid/nodeid -> topology/regions/{replacement}/regionid/clusterid/nodeid
+// {configs | secrets | actions}
+func Key(path, replacement string) string {
+	return strings.Replace(path, labels, replacement, -1)
+}
+
+func SearchKey(regionid, clusterid string) (string, error) {
+	if regionid == "*" && clusterid == "*" {
+		return JoinParts("", topology, regions, labels), nil // topology/regions/labels/
+	} else if regionid != "*" && clusterid == "*" {
+		return JoinParts("", topology, regions, labels, regionid), nil // topology/regions/labels/regionid/
+	} else if regionid != "*" && clusterid != "*" { //topology/regions/labels/regionid/clusterid/
+		return JoinParts("", topology, regions, labels, regionid, clusterid), nil
+	}
+	return "", errors.New("Request not valid")
 }

@@ -47,3 +47,5 @@ func (db *DB) Configs() storage.Configs { return &Configs{db} }
 func (db *DB) Actions() storage.Actions { return &Actions{db} }
 
 func (db *DB) Namespaces() storage.Namespaces { return &Namespaces{db} }
+
+func (db *DB) Reconcile() storage.Reconcile { return &Reconcile{db} }

@@ -87,6 +87,10 @@ func Run(db storage.DB, address string) {
 		db: db,
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() //Stop Reconcile protocol when service is done working
+	db.Reconcile().Start(ctx)
+
 	fmt.Println("Celestial RPC Started")
 	cPb.RegisterCelestialServiceServer(server, celestialServer)
 	server.Serve(lis)

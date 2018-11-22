@@ -21,20 +21,21 @@ func construct(key string, nsTask *rPb.KV) *cPb.Data {
 	data := &cPb.Data{Data: map[string]string{}}
 
 	keyParts := strings.Split(key, "/")
-	data.Data["regionid"] = keyParts[1]
-	data.Data["clusterid"] = keyParts[2]
-	data.Data["nodeid"] = keyParts[3]
+	data.Data["regionid"] = keyParts[3]
+	data.Data["clusterid"] = keyParts[4]
+	data.Data["nodeid"] = keyParts[5]
 
 	actions := []string{}
 	for k, v := range nsTask.Extras {
 		kv := strings.Join([]string{k, v.Value}, ":")
 		actions = append(actions, kv)
 	}
-	// actions = append(actions, strings.Join(nsTask.Index, ","))
+	actions = append(actions, strings.Join(nsTask.Index, ","))
 
-	timestamp := strconv.FormatInt(nsTask.Timestamp, 10)
+	timestamp := helper.TSToString(nsTask.Timestamp)
 	tkey := strings.Join([]string{"timestamp", timestamp}, "_")
 	data.Data[tkey] = strings.Join(actions, ",")
+	data.Data["index"] = strings.Join(nsTask.Index, ",")
 
 	return data
 }
@@ -88,9 +89,9 @@ func (a *Actions) getFT(ctx context.Context, key string, from, to int64) (error,
 		}
 
 		keyParts := strings.Split(key, "/")
-		data.Data["regionid"] = keyParts[1]
-		data.Data["clusterid"] = keyParts[2]
-		data.Data["nodeid"] = keyParts[3]
+		data.Data["regionid"] = keyParts[3]
+		data.Data["clusterid"] = keyParts[4]
+		data.Data["nodeid"] = keyParts[5]
 
 		actions := []string{}
 		for k, v := range nsTask.Extras {
@@ -111,9 +112,7 @@ func (a *Actions) getFT(ctx context.Context, key string, from, to int64) (error,
 				actions = append(actions, kv)
 			}
 		}
-		// actions = append(actions, strings.Join(nsTask.Index, ","))
-
-		timestamp := strconv.FormatInt(nsTask.Timestamp, 10)
+		timestamp := helper.TSToString(nsTask.Timestamp)
 		tkey := strings.Join([]string{"timestamp", timestamp}, "_")
 		data.Data[tkey] = strings.Join(actions, ",")
 		data.Data["index"] = strings.Join(nsTask.Index, ",")
@@ -166,7 +165,7 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 
 	datas := []*cPb.Data{}
 	for _, item := range gresp.Kvs {
-		newKey := helper.Key(string(item.Key), "configs")
+		newKey := helper.Key(string(item.Key), "actions")
 		ls := helper.SplitLabels(string(item.Value))
 		switch cmp {
 		case "all":
@@ -196,27 +195,13 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 
 // key -> topology/regions/actions/regionid/clusterid/nodes/nodeid
 func (a *Actions) mutate(ctx context.Context, key, userId string, payloads []*bPb.Payload) error {
-	cresp, cerr := a.db.Kv.Get(ctx, key)
-	if cerr != nil {
-		return cerr
-	}
-
 	// Get what is current state of the configs for the node
-	actions := &rPb.KV{}
-	for _, citem := range cresp.Kvs {
-		cerr = proto.Unmarshal(citem.Value, actions)
-		if cerr != nil {
-			return cerr
-		}
-	}
-	if actions.Extras == nil {
-		actions.Extras = map[string]*rPb.KVData{}
+	actions := &rPb.KV{
+		Extras:    map[string]*rPb.KVData{},
+		Timestamp: helper.Timestamp(),
+		UserId:    userId,
 	}
 
-	// Than test if submited configs exits or not.
-	// If exists and value is Tombstone than mark that configs for deletation
-	// and executor service will remove it from the nodes
-	// If exists and value is not Tombstone than replace value with new value
 	// WHEN WORKING WITH ACTIONS WE NEED TO PRESEVER ACTIONS ORDER!
 	for _, payload := range payloads {
 		for _, index := range payload.Index {
@@ -224,8 +209,6 @@ func (a *Actions) mutate(ctx context.Context, key, userId string, payloads []*bP
 		}
 		actions.Index = payload.Index
 	}
-	actions.Timestamp = helper.Timestamp() // add a timestamp. Actoins are grouped by time!
-	actions.UserId = userId
 
 	// Save node actions
 	aData, aerr := proto.Marshal(actions)
@@ -241,6 +224,12 @@ func (a *Actions) mutate(ctx context.Context, key, userId string, payloads []*bP
 }
 
 func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
+	// Log mutate request for resilience
+	_, lerr := logMutate(ctx, req, a.db)
+	if lerr != nil {
+		return lerr, nil
+	}
+
 	task := req.Mutate
 	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
 	if kerr != nil {
@@ -253,7 +242,7 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	}
 	for _, item := range gresp.Kvs {
 		key := helper.Key(string(item.Key), "actions")
-		newKey := helper.Join(key, strconv.FormatInt(task.Timestamp, 10))
+		newKey := helper.Join(key, helper.TSToString(task.Timestamp))
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)
 

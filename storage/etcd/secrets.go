@@ -8,7 +8,6 @@ import (
 	rPb "github.com/c12s/scheme/core"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
-	"strconv"
 	"strings"
 )
 
@@ -17,24 +16,37 @@ type Secrets struct {
 }
 
 func (n *Secrets) get(ctx context.Context, key, user string) (error, *cPb.Data) {
-	err, resp := n.db.sdb.SSecrets().List(ctx, key, user)
+	gresp, err := n.db.Kv.Get(ctx, key)
 	if err != nil {
 		return err, nil
 	}
 
-	keyParts := strings.Split(key, "/")
 	data := &cPb.Data{Data: map[string]string{}}
-	data.Data["regionid"] = keyParts[1]
-	data.Data["clusterid"] = keyParts[2]
-	data.Data["nodeid"] = keyParts[3]
+	for _, item := range gresp.Kvs {
+		nsTask := &rPb.KV{}
+		err = proto.Unmarshal(item.Value, nsTask)
+		if err != nil {
+			return err, nil
+		}
 
-	secrets := []string{}
-	for k, v := range resp {
-		kv := strings.Join([]string{k, v}, ":")
-		secrets = append(secrets, kv)
+		keyParts := strings.Split(string(item.Key), "/")
+		data.Data["regionid"] = keyParts[2]
+		data.Data["clusterid"] = keyParts[3]
+		data.Data["nodeid"] = keyParts[4]
+
+		err, resp := n.db.sdb.SSecrets().List(ctx, string(item.Key), user)
+		if err != nil {
+			return err, nil
+		}
+
+		secrets := []string{}
+		for k, v := range resp {
+			kv := strings.Join([]string{k, v}, ":")
+			secrets = append(secrets, kv)
+		}
+		data.Data["secrets"] = strings.Join(secrets, ",")
 	}
-	data.Data["secrets"] = strings.Join(secrets, ",")
-	return err, data
+	return nil, data
 }
 
 func (s *Secrets) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
@@ -50,7 +62,7 @@ func (s *Secrets) List(ctx context.Context, extras map[string]string) (error, *c
 
 	datas := []*cPb.Data{}
 	for _, item := range gresp.Kvs {
-		newKey := helper.Key(string(item.Key), "secrets")
+		newKey := helper.NewKey(string(item.Key), "secrets")
 		ls := helper.SplitLabels(string(item.Value))
 		switch cmp {
 		case "all":
@@ -72,73 +84,57 @@ func (s *Secrets) List(ctx context.Context, extras map[string]string) (error, *c
 		}
 	}
 	return nil, &cPb.ListResp{Data: datas}
+}
 
-	return nil, nil
+func toSecrets(payloads []*bPb.Payload) map[string]interface{} {
+	input := map[string]interface{}{}
+	for _, payload := range payloads {
+		for pk, pv := range payload.Value {
+			input[pk] = pv
+		}
+	}
+	return input
 }
 
 // key -> topology/regions/secrets/regionid/clusterid/nodes/nodeid
 func (s *Secrets) mutate(ctx context.Context, key, userId string, payloads []*bPb.Payload) error {
-	sresp, serr := s.db.Kv.Get(ctx, key)
-	if serr != nil {
-		return serr
-	}
-
-	// Get what is current state of the configs for the node
-	secrets := &rPb.KV{}
-	for _, sitem := range sresp.Kvs {
-		serr = proto.Unmarshal(sitem.Value, secrets)
-		if serr != nil {
-			return serr
-		}
-	}
-	if secrets.Extras == nil {
-		secrets.Extras = map[string]*rPb.KVData{}
-	}
-
-	input := map[string]interface{}{}
-	for _, payload := range payloads {
-		for pk, pv := range payload.Value {
-			if _, ok := secrets.Extras[pk]; ok {
-				if pv == Tombstone {
-					secrets.Extras[pk] = &rPb.KVData{Tombstone, "Waiting"}
-				} else {
-					secrets.Extras[pk] = &rPb.KVData{"", "Waiting"}
-				}
-			} else {
-				secrets.Extras[pk] = &rPb.KVData{"", "Waiting"}
-			}
-			input[pk] = pv
-		}
-	}
-	secrets.Timestamp = helper.Timestamp()
-	secrets.UserId = userId
-
-	err, sData := s.db.sdb.SSecrets().Mutate(ctx, key, userId, input)
+	temp := toSecrets(payloads)
+	err, sData := s.db.sdb.SSecrets().Mutate(ctx, key, userId, temp)
 	if err != nil {
 		return err
 	}
 
 	if sData != "" {
-		for k, _ := range secrets.Extras {
+		secrets := &rPb.KV{
+			Extras:    map[string]*rPb.KVData{},
+			Timestamp: helper.Timestamp(),
+			UserId:    userId,
+		}
+		for k, _ := range temp {
 			secrets.Extras[k] = &rPb.KVData{sData, "Waiting"}
 		}
 
-		// Save node configs
-		sData, sserr := proto.Marshal(secrets)
-		if sserr != nil {
-			return sserr
+		// Save node secrets in kv store just path to secrets store
+		data, serr := proto.Marshal(secrets)
+		if serr != nil {
+			return serr
 		}
 
-		_, serr = s.db.Kv.Put(ctx, key, string(sData))
+		_, serr = s.db.Kv.Put(ctx, key, string(data))
 		if serr != nil {
 			return serr
 		}
 	}
-
 	return nil
 }
 
 func (c *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
+	// Log mutate request for resilience
+	_, lerr := logMutate(ctx, req, c.db)
+	if lerr != nil {
+		return lerr, nil
+	}
+
 	task := req.Mutate
 	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
 	if kerr != nil {
@@ -150,8 +146,7 @@ func (c *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 		return err, nil
 	}
 	for _, item := range gresp.Kvs {
-		key := helper.Key(string(item.Key), "secrets")
-		newKey := helper.Join(key, strconv.FormatInt(task.Timestamp, 10))
+		newKey := helper.NewKey(string(item.Key), "secrets")
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)
 

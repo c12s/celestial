@@ -2,15 +2,12 @@ package etcd
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"github.com/c12s/celestial/helper"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
 	rPb "github.com/c12s/scheme/core"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
-	"strconv"
 	"strings"
 )
 
@@ -19,18 +16,13 @@ type Configs struct {
 }
 
 func (n *Configs) get(ctx context.Context, key string) (error, *cPb.Data) {
-	gresp, err := n.db.Kv.Get(ctx, key, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	gresp, err := n.db.Kv.Get(ctx, key)
 	if err != nil {
 		return err, nil
 	}
 
-	if len(gresp.Kvs) == 0 {
-		return errors.New("Empty"), nil
-	}
-
 	data := &cPb.Data{Data: map[string]string{}}
 	for _, item := range gresp.Kvs {
-		fmt.Println(string(item.Key))
 		nsTask := &rPb.KV{}
 		err = proto.Unmarshal(item.Value, nsTask)
 		if err != nil {
@@ -38,9 +30,9 @@ func (n *Configs) get(ctx context.Context, key string) (error, *cPb.Data) {
 		}
 
 		keyParts := strings.Split(key, "/")
-		data.Data["regionid"] = keyParts[1]
-		data.Data["clusterid"] = keyParts[2]
-		data.Data["nodeid"] = keyParts[3]
+		data.Data["regionid"] = keyParts[2]
+		data.Data["clusterid"] = keyParts[3]
+		data.Data["nodeid"] = keyParts[4]
 
 		configs := []string{}
 		for k, v := range nsTask.Extras {
@@ -64,7 +56,7 @@ func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *c
 
 	datas := []*cPb.Data{}
 	for _, item := range gresp.Kvs {
-		newKey := helper.Key(string(item.Key), "configs")
+		newKey := helper.NewKey(string(item.Key), "configs")
 		ls := helper.SplitLabels(string(item.Value))
 		switch cmp {
 		case "all":
@@ -90,57 +82,39 @@ func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *c
 
 // key -> topology/regions/configs/regionid/clusterid/nodes/nodeid
 func (c *Configs) mutate(ctx context.Context, key, userId string, payloads []*bPb.Payload) error {
-	cresp, cerr := c.db.Kv.Get(ctx, key)
-	if cerr != nil {
-		return cerr
+	configs := &rPb.KV{
+		Extras:    map[string]*rPb.KVData{},
+		Timestamp: helper.Timestamp(),
+		UserId:    userId,
 	}
 
-	// Get what is current state of the configs for the node
-	configs := &rPb.KV{}
-	for _, citem := range cresp.Kvs {
-		cerr = proto.Unmarshal(citem.Value, configs)
-		if cerr != nil {
-			return cerr
-		}
-	}
-	if configs.Extras == nil {
-		configs.Extras = map[string]*rPb.KVData{}
-	}
-
-	// Than test if submited configs exits or not.
-	// If exists and value is Tombstone than mark that configs for deletation
-	// and executor service will remove it from the nodes
-	// If exists and value is not Tombstone than replace value with new value
+	// Clear previous values, so that new values can take an effect
 	for _, payload := range payloads {
 		for pk, pv := range payload.Value {
-			if _, ok := configs.Extras[pk]; ok {
-				if pv == Tombstone {
-					configs.Extras[pk] = &rPb.KVData{Tombstone, "Waiting"}
-				} else {
-					configs.Extras[pk] = &rPb.KVData{pv, "Waiting"}
-				}
-			} else {
-				configs.Extras[pk] = &rPb.KVData{pv, "Waiting"}
-			}
+			configs.Extras[pk] = &rPb.KVData{pv, "Waiting"}
 		}
 	}
-	configs.Timestamp = helper.Timestamp()
-	configs.UserId = userId
 
 	// Save node configs
-	cData, serr := proto.Marshal(configs)
-	if serr != nil {
-		return serr
+	cData, err := proto.Marshal(configs)
+	if err != nil {
+		return err
 	}
 
-	_, cerr = c.db.Kv.Put(ctx, key, string(cData))
-	if cerr != nil {
-		return cerr
+	_, err = c.db.Kv.Put(ctx, key, string(cData))
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
 func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
+	// Log mutate request for resilience
+	_, lerr := logMutate(ctx, req, c.db)
+	if lerr != nil {
+		return lerr, nil
+	}
+
 	task := req.Mutate
 	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
 	if kerr != nil {
@@ -152,8 +126,7 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 		return err, nil
 	}
 	for _, item := range gresp.Kvs {
-		key := helper.Key(string(item.Key), "configs")
-		newKey := helper.Join(key, strconv.FormatInt(task.Timestamp, 10))
+		newKey := helper.NewKey(string(item.Key), "configs")
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)
 

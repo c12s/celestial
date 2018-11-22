@@ -4,19 +4,18 @@ import (
 	"context"
 	"fmt"
 	"github.com/coreos/etcd/clientv3"
-	// "strings"
-	// "time"
 )
-
-var keys = [...]string{"topology/regions/secrets", "topology/regions/configs", "topology/regions/actions"}
 
 type Reconcile struct {
 	db *DB
 }
 
-func (r *Reconcile) startWorker(ctx context.Context, key string) {
+const watchKey = "topology/regions/tasks"
+
+func (r *Reconcile) Start(ctx context.Context) {
+	fmt.Println("Reconcile started...")
 	go func() {
-		watchChan := r.db.Client.Watch(ctx, key, clientv3.WithPrefix())
+		watchChan := r.db.Client.Watch(ctx, watchKey, clientv3.WithPrefix())
 		for {
 			select {
 			case result := <-watchChan:
@@ -29,10 +28,4 @@ func (r *Reconcile) startWorker(ctx context.Context, key string) {
 			}
 		}
 	}()
-}
-
-func (r *Reconcile) Start(ctx context.Context) {
-	for _, key := range keys {
-		r.startWorker(ctx, key)
-	}
 }

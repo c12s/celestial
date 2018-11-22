@@ -3,6 +3,7 @@ package helper
 import (
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -19,6 +20,8 @@ const (
 	configs  = "configs"
 	secrets  = "secrets"
 	undone   = "undone"
+
+	tasks = "tasks"
 )
 
 /*
@@ -87,12 +90,14 @@ func SplitLabels(value string) []string {
 }
 
 /*
-TODO: **MAYBE** NEW KEY SPACE
 topology/regions/labels/regionid/clusterid/nodeid -> [k:v, k:v]
 topology/regions/regionid/clusterid/nodes/nodeid -> {stats}
-topology/regions/configs/regionid/clusterid/nodeid/timestamp -> {config list with status}
-topology/regions/secrets/regionid/clusterid/nodeid/timestamp -> {secrets list with status}
+
+topology/regions/regionid/clusterid/nodeid/configs -> {config list with status}
+topology/regions/regionid/clusterid/nodeid/secrets -> {secrets list with status}
 topology/regions/actions/regionid/clusterid/nodeid/timestamp -> {actions list history with status}
+
+topology/regions/tasks/timestamp -> {tasks submited to particular cluster} holds data until all changes are commited! Append log
 */
 
 // topology/regions/regionid/clusterid/nodeid -> [k:v, k:v]
@@ -159,4 +164,19 @@ func SearchKey(regionid, clusterid string) (string, error) {
 		return JoinParts("", topology, regions, labels, regionid, clusterid), nil
 	}
 	return "", errors.New("Request not valid")
+}
+
+func NewKey(path, artifact string) string {
+	keyPart := strings.Join(strings.Split(path, "/labels/"), "/")
+	newKey := Join(keyPart, artifact)
+	return newKey
+}
+
+func TSToString(value int64) string {
+	return strconv.FormatInt(value, 10)
+}
+
+func TasksKey() string {
+	ts := TSToString(Timestamp())
+	return JoinFull(topology, regions, tasks, ts)
 }

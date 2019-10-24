@@ -30,9 +30,8 @@ func New(conf *config.Config, timeout time.Duration) (*DB, error) {
 		return nil, err
 	}
 
-	kv := clientv3.NewKV(cli)
 	return &DB{
-		Kv:     kv,
+		Kv:     clientv3.NewKV(cli),
 		Client: cli,
 		sdb:    sdb,
 	}, nil

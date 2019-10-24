@@ -8,6 +8,7 @@ type Config struct {
 	ConfVersion    string       `yaml:"version"`
 	Address        string       `yaml:"address"`
 	Apollo         string       `yaml:"apollo"`
+	Gravity        string       `yaml:"gravity"`
 	ClientConf     ClientConfig `yaml:"client"`
 	Endpoints      []string     `yaml:"db"`
 	SEndpoints     []string     `yaml:"sdb"`

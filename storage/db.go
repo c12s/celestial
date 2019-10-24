@@ -34,5 +34,5 @@ type Secrets interface {
 }
 
 type Reconcile interface {
-	Start(ctx context.Context)
+	Start(ctx context.Context, gravity string)
 }

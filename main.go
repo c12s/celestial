@@ -23,5 +23,5 @@ func main() {
 	}
 
 	//Start Server
-	service.Run(db, conf.Address)
+	service.Run(db, conf)
 }

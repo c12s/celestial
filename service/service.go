@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"github.com/c12s/celestial/model/config"
 	"github.com/c12s/celestial/storage"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
@@ -75,8 +76,8 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 	return &cPb.MutateResp{Error: "Not valid file type"}, nil
 }
 
-func Run(db storage.DB, address string) {
-	lis, err := net.Listen("tcp", address)
+func Run(db storage.DB, conf *config.Config) {
+	lis, err := net.Listen("tcp", conf.Address)
 	if err != nil {
 		log.Fatalf("failed to initializa TCP listen: %v", err)
 	}
@@ -89,7 +90,7 @@ func Run(db storage.DB, address string) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() //Stop Reconcile protocol when service is done working
-	db.Reconcile().Start(ctx)
+	db.Reconcile().Start(ctx, conf.Gravity)
 
 	fmt.Println("Celestial RPC Started")
 	cPb.RegisterCelestialServiceServer(server, celestialServer)

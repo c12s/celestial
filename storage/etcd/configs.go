@@ -109,17 +109,12 @@ func (c *Configs) mutate(ctx context.Context, key, userId string, payloads []*bP
 }
 
 func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
-	// Log mutate request for resilience
-	_, lerr := logMutate(ctx, req, c.db)
-	if lerr != nil {
-		return lerr, nil
-	}
-
 	task := req.Mutate
 	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
 	if kerr != nil {
 		return kerr, nil
 	}
+	index := []string{}
 
 	gresp, err := c.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
@@ -146,6 +141,50 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 				}
 			}
 		}
+
+		index = append(index, newKey)
 	}
+
+	//Save index for gravity
+	req.Index = index
+
+	// Log mutate request for resilience
+	_, lerr := logMutate(ctx, req, c.db)
+	if lerr != nil {
+		return lerr, nil
+	}
+
 	return nil, &cPb.MutateResp{"Config added."}
+}
+
+func (c *Configs) StatusUpdate(ctx context.Context, key, newStatus string) error {
+	resp, err := c.db.Kv.Get(ctx, key, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	if err != nil {
+		return err
+	}
+
+	for _, item := range resp.Kvs {
+		configs := &rPb.KV{}
+		err = proto.Unmarshal(item.Value, configs)
+		if err != nil {
+			return err
+		}
+		for k, _ := range configs.Extras {
+			kvc := configs.Extras[k]
+			configs.Extras[k] = &rPb.KVData{kvc.Value, newStatus}
+		}
+
+		// Save node configs
+		cData, err := proto.Marshal(configs)
+		if err != nil {
+			return err
+		}
+
+		_, err = c.db.Kv.Put(ctx, key, string(cData))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

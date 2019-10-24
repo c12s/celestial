@@ -224,17 +224,12 @@ func (a *Actions) mutate(ctx context.Context, key, userId string, payloads []*bP
 }
 
 func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
-	// Log mutate request for resilience
-	_, lerr := logMutate(ctx, req, a.db)
-	if lerr != nil {
-		return lerr, nil
-	}
-
 	task := req.Mutate
 	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
 	if kerr != nil {
 		return kerr, nil
 	}
+	index := []string{}
 
 	gresp, err := a.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
@@ -262,6 +257,22 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 				}
 			}
 		}
+
+		index = append(index, newKey)
 	}
+
+	//Save index for gravity
+	req.Index = index
+
+	// Log mutate request for resilience
+	_, lerr := logMutate(ctx, req, a.db)
+	if lerr != nil {
+		return lerr, nil
+	}
+
 	return nil, &cPb.MutateResp{"Actions added."}
+}
+
+func (a *Actions) StatusUpdate(ctx context.Context, key, newStatus string) error {
+	return nil
 }

@@ -16,11 +16,13 @@ type DB interface {
 type Configs interface {
 	List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp)
 	Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp)
+	StatusUpdate(ctx context.Context, key, newStatus string) error
 }
 
 type Actions interface {
 	List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp)
 	Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp)
+	StatusUpdate(ctx context.Context, key, newStatus string) error
 }
 
 type Namespaces interface {
@@ -31,6 +33,7 @@ type Namespaces interface {
 type Secrets interface {
 	List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp)
 	Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp)
+	StatusUpdate(ctx context.Context, key, newStatus string) error
 }
 
 type Reconcile interface {

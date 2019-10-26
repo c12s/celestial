@@ -180,3 +180,7 @@ func TasksKey() string {
 	ts := TSToString(Timestamp())
 	return JoinFull(topology, regions, tasks, ts)
 }
+
+func NodeKey(key string) string {
+	return strings.TrimSuffix(NewKey(key, ""), "/")
+}

@@ -142,7 +142,7 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 			}
 		}
 
-		index = append(index, newKey)
+		index = append(index, helper.NodeKey(string(item.Key)))
 	}
 
 	//Save index for gravity

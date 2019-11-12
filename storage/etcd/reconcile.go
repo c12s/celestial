@@ -58,8 +58,9 @@ func (r *Reconcile) Start(ctx context.Context, address string) {
 					}
 
 					req := &gPb.PutReq{
-						Key:  string(ev.Kv.Key), //key to be deleted after push is done
-						Task: mReq,
+						Key:     string(ev.Kv.Key), //key to be deleted after push is done
+						Task:    mReq,
+						TaskKey: string(ev.Kv.Key),
 					}
 
 					_, err = client.PutTask(ctx, req)
@@ -67,8 +68,6 @@ func (r *Reconcile) Start(ctx context.Context, address string) {
 						fmt.Println(err)
 						continue
 					}
-					fmt.Println("PutTask pozvan")
-
 				}
 			case <-ctx.Done():
 				fmt.Println(ctx.Err())

@@ -132,6 +132,7 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 				if err != nil {
 					return err, nil
 				}
+				index = append(index, newKey)
 			}
 		case bPb.CompareKind_ANY:
 			if helper.Compare(ls, els, false) {
@@ -139,10 +140,12 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 				if err != nil {
 					return err, nil
 				}
+				index = append(index, newKey)
 			}
 		}
 
-		index = append(index, helper.NodeKey(string(item.Key)))
+		// index = append(index, helper.NodeKey(string(item.Key)))
+		// index = append(index, newKey)
 	}
 
 	//Save index for gravity

@@ -12,6 +12,8 @@ type Config struct {
 	ClientConf     ClientConfig `yaml:"client"`
 	Endpoints      []string     `yaml:"db"`
 	SEndpoints     []string     `yaml:"sdb"`
+	Syncer         string       `yaml:"syncer"`
+	STopic         string       `yaml:"stopic"`
 	DialTimeout    int          `yaml:"dialtimeout"`
 	RequestTimeout int          `yaml:"requesttimeout"`
 }

@@ -184,3 +184,12 @@ func TasksKey() string {
 func NodeKey(key string) string {
 	return strings.TrimSuffix(NewKey(key, ""), "/")
 }
+
+func ConstructKey(node, kind string) string {
+	dotted := strings.Join([]string{node, kind}, ".")
+	return strings.ReplaceAll(dotted, ".", "/")
+}
+
+func ToUpper(s string) string {
+	return strings.ToUpper(s)
+}

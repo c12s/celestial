@@ -3,6 +3,8 @@ package etcd
 import (
 	"github.com/c12s/celestial/model/config"
 	"github.com/c12s/celestial/storage"
+	sync "github.com/c12s/celestial/storage/sync"
+	"github.com/c12s/celestial/storage/sync/nats"
 	"github.com/c12s/celestial/storage/vault"
 	"github.com/coreos/etcd/clientv3"
 	"time"
@@ -12,6 +14,7 @@ type DB struct {
 	Kv     clientv3.KV
 	Client *clientv3.Client
 	sdb    storage.SecretsDB
+	s      sync.Syncer
 }
 
 func New(conf *config.Config, timeout time.Duration) (*DB, error) {
@@ -30,10 +33,16 @@ func New(conf *config.Config, timeout time.Duration) (*DB, error) {
 		return nil, err
 	}
 
+	ns, err := nats.NewNatsSync(conf.Syncer, conf.STopic)
+	if err != nil {
+		return nil, err
+	}
+
 	return &DB{
 		Kv:     clientv3.NewKV(cli),
 		Client: cli,
 		sdb:    sdb,
+		s:      ns,
 	}, nil
 }
 

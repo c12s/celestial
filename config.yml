@@ -13,4 +13,6 @@ celestial:
       key: path/to/file/
       trusted: path/to/file/
   dialtimeout: 5
+  syncer: 0.0.0.0:4222
+  stopic: syncTopic
   requesttimeout: 10

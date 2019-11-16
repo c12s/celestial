@@ -1,17 +1,18 @@
 celestial:
   version: v1
+  address: localhost:8000
+  apollo: localhost:8083
+  gravity: localhost:8004
+  sdb:
+      - http://0.0.0.0:8200
+  db:
+      - 0.0.0.0:2379
   client:
     security:
       cert: path/to/file/
       key: path/to/file/
       trusted: path/to/file/
-    endpoints:
-      - 0.0.0.0:2379
-    dialtimeout: 5
-    requesttimeout: 10
-  connection:
-    rpc:
-      address: localhost:8000
-    rest:
-      address: localhost:8000
-    standalone: False
+  dialtimeout: 5
+  syncer: 0.0.0.0:4222
+  stopic: syncTopic
+  requesttimeout: 10

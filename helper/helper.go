@@ -1,135 +1,195 @@
 package helper
 
 import (
-	"crypto/md5"
-	"encoding/json"
-	"fmt"
-	"github.com/c12s/celestial/model"
-	pb "github.com/c12s/celestial/pb"
+	"errors"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
-	SECRETS = 1
-	CONFIGS = 2
+	namespaces = "namespaces"
+	labels     = "labels"
+	status     = "status"
+
+	topology = "topology"
+	regions  = "regions"
+	nodes    = "nodes"
+	actions  = "actions"
+	configs  = "configs"
+	secrets  = "secrets"
+	undone   = "undone"
+
+	tasks = "tasks"
 )
 
-// Marshall node informations into byte array
-func NodeMarshall(self model.Node) ([]byte, error) {
-	bnode, err := json.Marshal(self)
-	if err != nil {
-		return nil, err
-	}
+/*
+namespaces/labels/namespace -> [k:v, k:v]
+namespaces/namespace -> {data}
+namespaces/namespace/status -> "status"
+*/
 
-	return bnode, nil
-}
-
-func NodeUnmarshall(blob []byte) (*model.Node, error) {
-	var node model.Node
-	err := json.Unmarshal(blob, &node)
-	if err != nil {
-		return nil, err
-	}
-
-	return &node, nil
-}
-
-func GenerateKey(data ...string) string {
-	key := "/topology/%s/"
-	return fmt.Sprintf(key, strings.Join(data, "/"))
-}
-
-func GenerateKeys(regions, clusters []string) []string {
-	keys := []string{}
-	for _, region := range regions {
-		for _, cluster := range clusters {
-			key := GenerateKey(region, cluster)
-			keys = append(keys, key)
-		}
-	}
-
-	return keys
-}
-
-func Check(e error) {
-	if e != nil {
-		panic(e)
+func Merge(m1, m2 map[string]string) {
+	for k, v := range m2 {
+		m1[k] = v
 	}
 }
 
-func NodeToProto(resp []model.Node) *pb.ListResp {
-	data := []*pb.NodeData{}
+func NSKey(ns string) string {
+	// mid := fmt.Sprintf("%s:%s", namespace, name)
+	s := []string{namespaces, ns}
+	return strings.Join(s, "/")
+}
 
-	for _, item := range resp {
-		kvs := []*pb.KV{}
-		for k, v := range item.Configs.Kvs {
-			kv := &pb.KV{
-				Key:   k,
-				Value: v,
+func NSLabelsKey(name string) string {
+	prefix := NSKey(labels)
+	s := []string{prefix, name}
+	return strings.Join(s, "/")
+}
+
+func NSStatusKey(name string) string {
+	prefix := NSKey(name)
+	s := []string{prefix, status}
+	return strings.Join(s, "/")
+}
+
+func NS() string {
+	return namespaces
+}
+
+func NSLabels() string {
+	return strings.Join([]string{namespaces, labels}, "/")
+}
+
+func Compare(a, b []string, strict bool) bool {
+	for _, akv := range a {
+		for _, bkv := range b {
+			if akv == bkv && !strict {
+				return true
 			}
-			kvs = append(kvs, kv)
 		}
-
-		node := &pb.NodeData{
-			NodeId: hashNode(item),
-			Data:   kvs,
-		}
-		data = append(data, node)
 	}
-
-	return &pb.ListResp{
-		Error: "NONE",
-		Data:  data,
-	}
+	return true
 }
 
-func listReq(req *pb.ListReq) *model.KVS {
-	m := make(map[string]string)
-	for _, item := range req.Labels {
-		m[item.Key] = item.Value
+func Labels(lbs map[string]string) []string {
+	lbls := []string{}
+	for k, v := range lbs {
+		kv := strings.Join([]string{k, v}, ":")
+		lbls = append(lbls, kv)
 	}
-
-	return &model.KVS{
-		Kvs: m,
-	}
+	sort.Strings(lbls)
+	return lbls
 }
 
-func mutateReq(req *pb.MutateReq) (*model.KVS, *model.KVS, []string, []string) {
-	l := make(map[string]string)
-	d := make(map[string]string)
-
-	for _, item := range req.Content.Labels {
-		l[item.Key] = item.Value
-	}
-
-	for _, item := range req.Content.Data {
-		d[item.Key] = item.Value
-	}
-
-	return &model.KVS{Kvs: l}, &model.KVS{Kvs: d},
-		req.RegionIds, req.ClusterIds
-
+func SplitLabels(value string) []string {
+	ls := strings.Split(value, ",")
+	sort.Strings(ls)
+	return ls
 }
 
-func ProtoToKVS(req interface{}, data ...interface{}) {
-	switch castReq := req.(type) {
-	case pb.MutateReq:
-		l, d, r, c := mutateReq(&castReq)
-		data[0] = l
-		data[1] = d
-		data[2] = r
-		data[3] = c
-	case pb.ListReq:
-		data[0] = listReq(&castReq)
-	default:
-		fmt.Println("NOt valid type")
-	}
+/*
+topology/regions/labels/regionid/clusterid/nodeid -> [k:v, k:v]
+topology/regions/regionid/clusterid/nodes/nodeid -> {stats}
+
+topology/regions/regionid/clusterid/nodeid/configs -> {config list with status}
+topology/regions/regionid/clusterid/nodeid/secrets -> {secrets list with status}
+topology/regions/actions/regionid/clusterid/nodeid/timestamp -> {actions list history with status}
+
+topology/regions/tasks/timestamp -> {tasks submited to particular cluster} holds data until all changes are commited! Append log
+*/
+
+// topology/regions/regionid/clusterid/nodeid -> [k:v, k:v]
+func ACSNodeKey(rid, cid, nid string) string {
+	s := []string{topology, regions, rid, cid, nid}
+	return strings.Join(s, "/")
 }
 
-func hashNode(node model.Node) string {
-	arrBytes := []byte{}
-	jsonBytes, _ := json.Marshal(node)
-	arrBytes = append(arrBytes, jsonBytes...)
+// topology/regions/regionid/clusterid/nodes
+func ACSNodesKey(rid, cid string) string {
+	s := []string{topology, regions, rid, cid, nodes}
+	return strings.Join(s, "/")
+}
 
-	return fmt.Sprintf("%x", md5.Sum(arrBytes))
+// topology/regions/labels/regionid/clusterid/nodeid
+func ACSLabelsKey(rid, cid, nid string) string {
+	s := []string{topology, regions, labels, rid, cid, nid}
+	return strings.Join(s, "/")
+}
+
+// topology/regionid/clusterid/nodeid/{artifact} [configs | secrets | actions]
+func Join(keyPart, artifact string) string {
+	s := []string{keyPart, artifact}
+	return strings.Join(s, "/")
+}
+
+// construct variable path
+func JoinParts(artifact string, parts ...string) string {
+	s := []string{}
+	for _, part := range parts {
+		s = append(s, part)
+	}
+
+	if artifact != "" {
+		s = append(s, artifact)
+	}
+	return strings.Join(s, "/")
+}
+
+func JoinFull(parts ...string) string {
+	s := []string{}
+	for _, part := range parts {
+		s = append(s, part)
+	}
+	return strings.Join(s, "/")
+}
+
+func Timestamp() int64 {
+	return time.Now().Unix()
+}
+
+// from: topology/regions/labels/regionid/clusterid/nodeid -> topology/regions/{replacement}/regionid/clusterid/nodeid
+// {configs | secrets | actions}
+func Key(path, replacement string) string {
+	return strings.Replace(path, labels, replacement, -1)
+}
+
+func SearchKey(regionid, clusterid string) (string, error) {
+	if regionid == "*" && clusterid == "*" {
+		return JoinParts("", topology, regions, labels), nil // topology/regions/labels/
+	} else if regionid != "*" && clusterid == "*" {
+		return JoinParts("", topology, regions, labels, regionid), nil // topology/regions/labels/regionid/
+	} else if regionid != "*" && clusterid != "*" { //topology/regions/labels/regionid/clusterid/
+		return JoinParts("", topology, regions, labels, regionid, clusterid), nil
+	}
+	return "", errors.New("Request not valid")
+}
+
+func NewKey(path, artifact string) string {
+	keyPart := strings.Join(strings.Split(path, "/labels/"), "/")
+	newKey := Join(keyPart, artifact)
+	return newKey
+}
+
+func TSToString(value int64) string {
+	return strconv.FormatInt(value, 10)
+}
+
+func TasksKey() string {
+	ts := TSToString(Timestamp())
+	return JoinFull(topology, regions, tasks, ts)
+}
+
+func NodeKey(key string) string {
+	return strings.TrimSuffix(NewKey(key, ""), "/")
+}
+
+func ConstructKey(node, kind string) string {
+	dotted := strings.Join([]string{node, kind}, ".")
+	return strings.ReplaceAll(dotted, ".", "/")
+}
+
+func ToUpper(s string) string {
+	return strings.ToUpper(s)
 }

@@ -335,15 +335,23 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 }
 
 func (a *Actions) StatusUpdate(ctx context.Context, key, newStatus string) error {
+	span, _ := sg.FromGRPCContext(ctx, "statusUpdate")
+	defer span.Finish()
+	fmt.Println(span)
+
+	child := span.Child("etcd.get")
 	resp, err := a.db.Kv.Get(ctx, key, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
+		child.AddLog(&sg.KV{"etcd.get error", err.Error()})
 		return err
 	}
+	go child.Finish()
 
 	for _, item := range resp.Kvs {
 		actions := &rPb.KV{}
 		err = proto.Unmarshal(item.Value, actions)
 		if err != nil {
+			span.AddLog(&sg.KV{"unmarshall error", err.Error()})
 			return err
 		}
 		for k, _ := range actions.Extras {
@@ -354,13 +362,17 @@ func (a *Actions) StatusUpdate(ctx context.Context, key, newStatus string) error
 		// Save node configs
 		cData, err := proto.Marshal(actions)
 		if err != nil {
+			span.AddLog(&sg.KV{"marshaling error", err.Error()})
 			return err
 		}
 
+		child1 := span.Child("etcd.put")
 		_, err = a.db.Kv.Put(ctx, key, string(cData))
 		if err != nil {
+			child1.AddLog(&sg.KV{"etcd.put error", err.Error()})
 			return err
 		}
+		child1.Finish()
 	}
 
 	return nil

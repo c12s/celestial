@@ -3,7 +3,7 @@ package nats
 import (
 	fPb "github.com/c12s/scheme/flusher"
 	"github.com/golang/protobuf/proto"
-	"github.com/nats-io/go-nats"
+	nats "github.com/nats-io/nats.go"
 )
 
 type NatsSync struct {

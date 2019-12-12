@@ -3,10 +3,12 @@ package etcd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/c12s/celestial/helper"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
 	rPb "github.com/c12s/scheme/core"
+	sg "github.com/c12s/stellar-go"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
 	"strconv"
@@ -41,50 +43,73 @@ func construct(key string, nsTask *rPb.KV) *cPb.Data {
 }
 
 func (a *Actions) getHT(ctx context.Context, key string, head, tail int64) (error, *cPb.Data) {
+	span, _ := sg.FromGRPCContext(ctx, "head/tail")
+	defer span.Finish()
+	fmt.Println(span)
+
 	if head != 0 {
+		chspan := span.Child("etcd.get head")
 		gresp, err := a.db.Kv.Get(ctx, key, clientv3.WithPrefix(),
 			clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend), clientv3.WithLimit(head))
 		if err != nil {
+			chspan.AddLog(&sg.KV{"etcd get head error", err.Error()})
 			return err, nil
 		}
 		for _, item := range gresp.Kvs {
 			nsTask := &rPb.KV{}
 			err = proto.Unmarshal(item.Value, nsTask)
 			if err != nil {
+				span.AddLog(&sg.KV{"unmarshall etcd get head error", err.Error()})
 				return err, nil
 			}
 			return nil, construct(key, nsTask)
 		}
+		go chspan.Finish()
+
 	} else if tail != 0 {
+		chspan := span.Child("etcd.get tail")
 		gresp, err := a.db.Kv.Get(ctx, key, clientv3.WithPrefix(),
 			clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend), clientv3.WithLimit(tail))
 		if err != nil {
+			chspan.AddLog(&sg.KV{"etcd get tail error", err.Error()})
 			return err, nil
 		}
 		for _, item := range gresp.Kvs {
 			nsTask := &rPb.KV{}
 			err = proto.Unmarshal(item.Value, nsTask)
 			if err != nil {
+				span.AddLog(&sg.KV{"unmarshall etcd get tail error", err.Error()})
 				return err, nil
 			}
 			return nil, construct(key, nsTask)
 		}
+		go chspan.Finish()
 	}
+
+	span.AddLog(&sg.KV{"request error", "Cant use hand and tail at the same time!"})
 	return errors.New("Cant use hand and tail at the same time!"), nil
 }
 
 func (a *Actions) getFT(ctx context.Context, key string, from, to int64) (error, *cPb.Data) {
+	span, _ := sg.FromGRPCContext(ctx, "filter")
+	defer span.Finish()
+	fmt.Println(span)
+
+	chspan := span.Child("etcd.get")
 	data := &cPb.Data{Data: map[string]string{}}
 	gresp, err := a.db.Kv.Get(ctx, key,
 		clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
+		chspan.AddLog(&sg.KV{"etcd get error", err.Error()})
 		return err, nil
 	}
+	go chspan.Finish()
 
 	for _, item := range gresp.Kvs {
 		nsTask := &rPb.KV{}
 		err = proto.Unmarshal(item.Value, nsTask)
 		if err != nil {
+			span.AddLog(&sg.KV{"unmarshall etcd get error", err.Error()})
 			return err, nil
 		}
 
@@ -146,18 +171,29 @@ func getExtras(extras map[string]string) (int64, int64, int64, int64) {
 }
 
 func (a *Actions) get(ctx context.Context, key string, head, tail, from, to int64) (error, *cPb.Data) {
+	span, _ := sg.FromGRPCContext(ctx, "get")
+	defer span.Finish()
+	fmt.Println(span)
+
 	if head != 0 || tail != 0 {
-		return a.getHT(ctx, key, head, tail)
+		return a.getHT(sg.NewTracedGRPCContext(ctx, span), key, head, tail)
 	}
-	return a.getFT(ctx, key, from, to)
+	return a.getFT(sg.NewTracedGRPCContext(ctx, span), key, from, to)
 }
 
 func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp) {
+	span, _ := sg.FromGRPCContext(ctx, "list")
+	defer span.Finish()
+	fmt.Println(span)
+
+	chspan := span.Child("etcd.get searchLabels")
 	searchLabelsKey := helper.JoinParts("", "topology", "regions", "labels") // -> topology/regions/labels => search key
 	gresp, err := a.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
+		chspan.AddLog(&sg.KV{"etcd.get error", err.Error()})
 		return err, nil
 	}
+	go chspan.Finish()
 
 	cmp := extras["compare"]
 	els := helper.SplitLabels(extras["labels"])
@@ -170,7 +206,7 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 		switch cmp {
 		case "all":
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				gerr, data := a.get(ctx, newKey, head, tail, from, to)
+				gerr, data := a.get(sg.NewTracedGRPCContext(ctx, span), newKey, head, tail, from, to)
 				if gerr != nil {
 					continue
 				}
@@ -180,7 +216,7 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 			}
 		case "any":
 			if helper.Compare(ls, els, false) {
-				gerr, data := a.get(ctx, newKey, head, tail, from, to)
+				gerr, data := a.get(sg.NewTracedGRPCContext(ctx, span), newKey, head, tail, from, to)
 				if gerr != nil {
 					continue
 				}
@@ -195,6 +231,10 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 
 // key -> topology/regions/actions/regionid/clusterid/nodes/nodeid
 func (a *Actions) mutate(ctx context.Context, key, userId string, payloads []*bPb.Payload) error {
+	span, _ := sg.FromGRPCContext(ctx, "helper mutate")
+	defer span.Finish()
+	fmt.Println(span)
+
 	// Get what is current state of the configs for the node
 	actions := &rPb.KV{
 		Extras:    map[string]*rPb.KVData{},
@@ -213,28 +253,42 @@ func (a *Actions) mutate(ctx context.Context, key, userId string, payloads []*bP
 	// Save node actions
 	aData, aerr := proto.Marshal(actions)
 	if aerr != nil {
+		span.AddLog(&sg.KV{"marshaling error", aerr.Error()})
 		return aerr
 	}
 
+	chspan := span.Child("etcd.put")
 	_, aerr = a.db.Kv.Put(ctx, key, string(aData))
 	if aerr != nil {
+		chspan.AddLog(&sg.KV{"etcd.put error", aerr.Error()})
 		return aerr
 	}
+	chspan.Finish()
+
 	return nil
 }
 
 func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
+	span, _ := sg.FromGRPCContext(ctx, "mutate")
+	defer span.Finish()
+	fmt.Println(span)
+
 	task := req.Mutate
 	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
 	if kerr != nil {
+		span.AddLog(&sg.KV{"search key error", kerr.Error()})
 		return kerr, nil
 	}
 	index := []string{}
 
+	chspan := span.Child("etcd.get searchLabels")
 	gresp, err := a.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
+		chspan.AddLog(&sg.KV{"etcd.get error", err.Error()})
 		return err, nil
 	}
+	go chspan.Finish()
+
 	for _, item := range gresp.Kvs {
 		key := helper.Key(string(item.Key), "actions")
 		newKey := helper.Join(key, helper.TSToString(task.Timestamp))
@@ -244,16 +298,18 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 		switch task.Task.Selector.Kind {
 		case bPb.CompareKind_ALL:
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				err = a.mutate(ctx, newKey, task.UserId, task.Task.Payload)
+				err = a.mutate(sg.NewTracedGRPCContext(ctx, span), newKey, task.UserId, task.Task.Payload)
 				if err != nil {
+					span.AddLog(&sg.KV{"mutate error", err.Error()})
 					return err, nil
 				}
 				index = append(index, newKey)
 			}
 		case bPb.CompareKind_ANY:
 			if helper.Compare(ls, els, false) {
-				err = a.mutate(ctx, newKey, task.UserId, task.Task.Payload)
+				err = a.mutate(sg.NewTracedGRPCContext(ctx, span), newKey, task.UserId, task.Task.Payload)
 				if err != nil {
+					span.AddLog(&sg.KV{"mutate error", err.Error()})
 					return err, nil
 				}
 				index = append(index, newKey)
@@ -268,14 +324,44 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	req.Index = index
 
 	// Log mutate request for resilience
-	_, lerr := logMutate(ctx, req, a.db)
+	_, lerr := logMutate(sg.NewTracedGRPCContext(ctx, span), req, a.db)
 	if lerr != nil {
+		span.AddLog(&sg.KV{"resilience log error", lerr.Error()})
 		return lerr, nil
 	}
 
+	span.AddLog(&sg.KV{"actions addition", "Actions added."})
 	return nil, &cPb.MutateResp{"Actions added."}
 }
 
 func (a *Actions) StatusUpdate(ctx context.Context, key, newStatus string) error {
+	resp, err := a.db.Kv.Get(ctx, key, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	if err != nil {
+		return err
+	}
+
+	for _, item := range resp.Kvs {
+		actions := &rPb.KV{}
+		err = proto.Unmarshal(item.Value, actions)
+		if err != nil {
+			return err
+		}
+		for k, _ := range actions.Extras {
+			kvc := actions.Extras[k]
+			actions.Extras[k] = &rPb.KVData{kvc.Value, newStatus}
+		}
+
+		// Save node configs
+		cData, err := proto.Marshal(actions)
+		if err != nil {
+			return err
+		}
+
+		_, err = a.db.Kv.Put(ctx, key, string(cData))
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

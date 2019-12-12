@@ -16,3 +16,8 @@ celestial:
   syncer: 0.0.0.0:4222
   stopic: syncTopic
   requesttimeout: 10
+  instrument:
+    address: 0.0.0.0:4222
+    stopic: collector
+    collect: 15s
+    location: logs/

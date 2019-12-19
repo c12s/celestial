@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/c12s/celestial/helper"
+	"github.com/c12s/celestial/service"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
 	rPb "github.com/c12s/scheme/core"
+	gPb "github.com/c12s/scheme/gravity"
 	sg "github.com/c12s/stellar-go"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
@@ -139,6 +141,13 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	defer span.Finish()
 	fmt.Println(span)
 
+	// Log mutate request for resilience
+	logTaskKey, lerr := logMutate(sg.NewTracedGRPCContext(ctx, span), req, c.db)
+	if lerr != nil {
+		span.AddLog(&sg.KV{"resilience log error", lerr.Error()})
+		return lerr, nil
+	}
+
 	task := req.Mutate
 	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
 	if kerr != nil {
@@ -181,22 +190,44 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 			}
 		}
 
-		// index = append(index, helper.NodeKey(string(item.Key)))
-		// index = append(index, newKey)
-	}
-
-	//Save index for gravity
-	req.Index = index
-
-	// Log mutate request for resilience
-	_, lerr := logMutate(sg.NewTracedGRPCContext(ctx, span), req, c.db)
-	if lerr != nil {
-		span.AddLog(&sg.KV{"resilience log error", lerr.Error()})
-		return lerr, nil
+		//Save index for gravity
+		req.Index = index
+		err = c.sendToGravity(sg.NewTracedGRPCContext(ctx, span), req, newKey, logTaskKey)
+		if err != nil {
+			span.AddLog(&sg.KV{"putTask error", err.Error()})
+		}
 	}
 
 	span.AddLog(&sg.KV{"config addition", "Config added."})
 	return nil, &cPb.MutateResp{"Config added."}
+}
+
+func (c *Configs) sendToGravity(ctx context.Context, req *cPb.MutateReq, key, taskKey string) error {
+	span, _ := sg.FromGRPCContext(ctx, "sendToGravity")
+	defer span.Finish()
+	fmt.Println(span)
+
+	client := service.NewGravityClient(c.db.Gravity)
+	for _, key := range req.Index {
+		span.AddLog(
+			&sg.KV{"update key", key},
+			&sg.KV{"update status", "In progress"},
+		)
+		c.StatusUpdate(sg.NewTracedGRPCContext(ctx, span), key, "In progress")
+	}
+
+	gReq := &gPb.PutReq{
+		Key:     key, //key to be deleted after push is done
+		Task:    req,
+		TaskKey: taskKey,
+	}
+
+	_, err := client.PutTask(sg.NewTracedGRPCContext(ctx, span), gReq)
+	if err != nil {
+		span.AddLog(&sg.KV{"putTask error", err.Error()})
+	}
+
+	return err
 }
 
 func (c *Configs) StatusUpdate(ctx context.Context, key, newStatus string) error {

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/c12s/celestial/helper"
+	"github.com/c12s/celestial/service"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
 	rPb "github.com/c12s/scheme/core"
+	gPb "github.com/c12s/scheme/gravity"
 	sg "github.com/c12s/stellar-go"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
@@ -154,10 +156,17 @@ func (s *Secrets) mutate(ctx context.Context, key, userId string, payloads []*bP
 	return nil
 }
 
-func (c *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
+func (s *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp) {
 	span, _ := sg.FromGRPCContext(ctx, "mutate")
 	defer span.Finish()
 	fmt.Println(span)
+
+	// Log mutate request for resilience
+	logTaskKey, lerr := logMutate(sg.NewTracedGRPCContext(ctx, span), req, s.db)
+	if lerr != nil {
+		span.AddLog(&sg.KV{"resilience log error", lerr.Error()})
+		return lerr, nil
+	}
 
 	task := req.Mutate
 	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
@@ -168,7 +177,7 @@ func (c *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	index := []string{}
 
 	chspan := span.Child("etcd.get searchLabels")
-	gresp, err := c.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	gresp, err := s.db.Kv.Get(ctx, searchLabelsKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
 	if err != nil {
 		chspan.AddLog(&sg.KV{"etcd.get error", err.Error()})
 		return err, nil
@@ -183,7 +192,7 @@ func (c *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 		switch task.Task.Selector.Kind {
 		case bPb.CompareKind_ALL:
 			if len(ls) == len(els) && helper.Compare(ls, els, true) {
-				err = c.mutate(sg.NewTracedGRPCContext(ctx, span), newKey, task.UserId, task.Task.Payload)
+				err = s.mutate(sg.NewTracedGRPCContext(ctx, span), newKey, task.UserId, task.Task.Payload)
 				if err != nil {
 					span.AddLog(&sg.KV{"mutate error", err.Error()})
 					return err, nil
@@ -192,7 +201,7 @@ func (c *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 			}
 		case bPb.CompareKind_ANY:
 			if helper.Compare(ls, els, false) {
-				err = c.mutate(sg.NewTracedGRPCContext(ctx, span), newKey, task.UserId, task.Task.Payload)
+				err = s.mutate(sg.NewTracedGRPCContext(ctx, span), newKey, task.UserId, task.Task.Payload)
 				if err != nil {
 					span.AddLog(&sg.KV{"mutate error", err.Error()})
 					return err, nil
@@ -201,22 +210,44 @@ func (c *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 			}
 		}
 
-		// index = append(index, helper.NodeKey(string(item.Key)))
-		// index = append(index, newKey)
-	}
-
-	//Save index for gravity
-	req.Index = index
-
-	// Log mutate request for resilience
-	_, lerr := logMutate(sg.NewTracedGRPCContext(ctx, span), req, c.db)
-	if lerr != nil {
-		span.AddLog(&sg.KV{"resilience log error", lerr.Error()})
-		return lerr, nil
+		//Save index for gravity
+		req.Index = index
+		err = s.sendToGravity(sg.NewTracedGRPCContext(ctx, span), req, newKey, logTaskKey)
+		if err != nil {
+			span.AddLog(&sg.KV{"putTask error", err.Error()})
+		}
 	}
 
 	span.AddLog(&sg.KV{"config addition", "Config added."})
 	return nil, &cPb.MutateResp{"Secrets added."}
+}
+
+func (s *Secrets) sendToGravity(ctx context.Context, req *cPb.MutateReq, key, taskKey string) error {
+	span, _ := sg.FromGRPCContext(ctx, "sendToGravity")
+	defer span.Finish()
+	fmt.Println(span)
+
+	client := service.NewGravityClient(s.db.Gravity)
+	for _, key := range req.Index {
+		span.AddLog(
+			&sg.KV{"update key", key},
+			&sg.KV{"update status", "In progress"},
+		)
+		s.StatusUpdate(sg.NewTracedGRPCContext(ctx, span), key, "In progress")
+	}
+
+	gReq := &gPb.PutReq{
+		Key:     key, //key to be deleted after push is done
+		Task:    req,
+		TaskKey: taskKey,
+	}
+
+	_, err := client.PutTask(sg.NewTracedGRPCContext(ctx, span), gReq)
+	if err != nil {
+		span.AddLog(&sg.KV{"putTask error", err.Error()})
+	}
+
+	return err
 }
 
 func (s *Secrets) StatusUpdate(ctx context.Context, key, newStatus string) error {

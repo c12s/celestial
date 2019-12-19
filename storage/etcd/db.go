@@ -11,10 +11,11 @@ import (
 )
 
 type DB struct {
-	Kv     clientv3.KV
-	Client *clientv3.Client
-	sdb    storage.SecretsDB
-	s      sync.Syncer
+	Kv      clientv3.KV
+	Client  *clientv3.Client
+	sdb     storage.SecretsDB
+	s       sync.Syncer
+	Gravity string
 }
 
 func New(conf *config.Config, timeout time.Duration) (*DB, error) {
@@ -39,10 +40,11 @@ func New(conf *config.Config, timeout time.Duration) (*DB, error) {
 	}
 
 	return &DB{
-		Kv:     clientv3.NewKV(cli),
-		Client: cli,
-		sdb:    sdb,
-		s:      ns,
+		Kv:      clientv3.NewKV(cli),
+		Client:  cli,
+		sdb:     sdb,
+		s:       ns,
+		Gravity: conf.Gravity,
 	}, nil
 }
 

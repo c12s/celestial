@@ -28,5 +28,5 @@ func logMutate(ctx context.Context, req *cPb.MutateReq, db *DB) (string, error) 
 		return "", err
 	}
 
-	return "Log done", nil
+	return logKey, nil
 }

@@ -140,6 +140,7 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	span, _ := sg.FromGRPCContext(ctx, "mutate")
 	defer span.Finish()
 	fmt.Println(span)
+	fmt.Println("SERIALIZE ", span.Serialize())
 
 	// Log mutate request for resilience
 	logTaskKey, lerr := logMutate(sg.NewTracedGRPCContext(ctx, span), req, c.db)
@@ -189,23 +190,24 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 				index = append(index, newKey)
 			}
 		}
+	}
 
-		//Save index for gravity
-		req.Index = index
-		err = c.sendToGravity(sg.NewTracedGRPCContext(ctx, span), req, newKey, logTaskKey)
-		if err != nil {
-			span.AddLog(&sg.KV{"putTask error", err.Error()})
-		}
+	//Save index for gravity
+	req.Index = index
+	err = c.sendToGravity(sg.NewTracedGRPCContext(ctx, span), req, logTaskKey)
+	if err != nil {
+		span.AddLog(&sg.KV{"putTask error", err.Error()})
 	}
 
 	span.AddLog(&sg.KV{"config addition", "Config added."})
 	return nil, &cPb.MutateResp{"Config added."}
 }
 
-func (c *Configs) sendToGravity(ctx context.Context, req *cPb.MutateReq, key, taskKey string) error {
+func (c *Configs) sendToGravity(ctx context.Context, req *cPb.MutateReq, taskKey string) error {
 	span, _ := sg.FromGRPCContext(ctx, "sendToGravity")
 	defer span.Finish()
 	fmt.Println(span)
+	fmt.Println("SERIALIZE ", span.Serialize())
 
 	client := service.NewGravityClient(c.db.Gravity)
 	for _, key := range req.Index {
@@ -217,7 +219,7 @@ func (c *Configs) sendToGravity(ctx context.Context, req *cPb.MutateReq, key, ta
 	}
 
 	gReq := &gPb.PutReq{
-		Key:     key, //key to be deleted after push is done
+		Key:     taskKey, //key to be deleted after push is done
 		Task:    req,
 		TaskKey: taskKey,
 	}
@@ -225,13 +227,18 @@ func (c *Configs) sendToGravity(ctx context.Context, req *cPb.MutateReq, key, ta
 	_, err := client.PutTask(sg.NewTracedGRPCContext(ctx, span), gReq)
 	if err != nil {
 		span.AddLog(&sg.KV{"putTask error", err.Error()})
+		return err
 	}
 
-	return err
+	return nil
 }
 
 func (c *Configs) StatusUpdate(ctx context.Context, key, newStatus string) error {
-	span, _ := sg.FromGRPCContext(ctx, "statusUpdate")
+	var span sg.Spanner
+	span, _ = sg.FromGRPCContext(ctx, "statusUpdate")
+	if span == nil {
+		span, _ = sg.FromContext(ctx, "statusUpdate")
+	}
 	defer span.Finish()
 	fmt.Println(span)
 

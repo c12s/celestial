@@ -324,20 +324,20 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 				index = append(index, newKey)
 			}
 		}
+	}
 
-		//Save index for gravity
-		req.Index = index
-		err = a.sendToGravity(sg.NewTracedGRPCContext(ctx, span), req, newKey, logTaskKey)
-		if err != nil {
-			span.AddLog(&sg.KV{"putTask error", err.Error()})
-		}
+	//Save index for gravity
+	req.Index = index
+	err = a.sendToGravity(sg.NewTracedGRPCContext(ctx, span), req, logTaskKey)
+	if err != nil {
+		span.AddLog(&sg.KV{"putTask error", err.Error()})
 	}
 
 	span.AddLog(&sg.KV{"actions addition", "Actions added."})
 	return nil, &cPb.MutateResp{"Actions added."}
 }
 
-func (a *Actions) sendToGravity(ctx context.Context, req *cPb.MutateReq, key, taskKey string) error {
+func (a *Actions) sendToGravity(ctx context.Context, req *cPb.MutateReq, taskKey string) error {
 	span, _ := sg.FromGRPCContext(ctx, "sendToGravity")
 	defer span.Finish()
 	fmt.Println(span)
@@ -352,7 +352,7 @@ func (a *Actions) sendToGravity(ctx context.Context, req *cPb.MutateReq, key, ta
 	}
 
 	gReq := &gPb.PutReq{
-		Key:     key, //key to be deleted after push is done
+		Key:     taskKey, //key to be deleted after push is done
 		Task:    req,
 		TaskKey: taskKey,
 	}
@@ -360,9 +360,10 @@ func (a *Actions) sendToGravity(ctx context.Context, req *cPb.MutateReq, key, ta
 	_, err := client.PutTask(sg.NewTracedGRPCContext(ctx, span), gReq)
 	if err != nil {
 		span.AddLog(&sg.KV{"putTask error", err.Error()})
+		return err
 	}
 
-	return err
+	return nil
 }
 
 func (a *Actions) StatusUpdate(ctx context.Context, key, newStatus string) error {

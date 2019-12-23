@@ -209,6 +209,12 @@ func (c *Configs) sendToGravity(ctx context.Context, req *cPb.MutateReq, taskKey
 	fmt.Println(span)
 	fmt.Println("SERIALIZE ", span.Serialize())
 
+	token, err := helper.ExtractToken(ctx)
+	if err != nil {
+		span.AddLog(&sg.KV{"token error", err.Error()})
+		return err
+	}
+
 	client := service.NewGravityClient(c.db.Gravity)
 	for _, key := range req.Index {
 		span.AddLog(
@@ -224,7 +230,13 @@ func (c *Configs) sendToGravity(ctx context.Context, req *cPb.MutateReq, taskKey
 		TaskKey: taskKey,
 	}
 
-	_, err := client.PutTask(sg.NewTracedGRPCContext(ctx, span), gReq)
+	_, err = client.PutTask(
+		helper.AppendToken(
+			sg.NewTracedGRPCContext(ctx, span),
+			token,
+		),
+		gReq,
+	)
 	if err != nil {
 		span.AddLog(&sg.KV{"putTask error", err.Error()})
 		return err

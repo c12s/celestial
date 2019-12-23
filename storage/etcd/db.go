@@ -16,6 +16,7 @@ type DB struct {
 	sdb     storage.SecretsDB
 	s       sync.Syncer
 	Gravity string
+	Apollo  string
 }
 
 func New(conf *config.Config, timeout time.Duration) (*DB, error) {
@@ -45,6 +46,7 @@ func New(conf *config.Config, timeout time.Duration) (*DB, error) {
 		sdb:     sdb,
 		s:       ns,
 		Gravity: conf.Gravity,
+		Apollo:  conf.Apollo,
 	}, nil
 }
 

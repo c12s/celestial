@@ -1,9 +1,12 @@
 package service
 
 import (
+	"errors"
 	"fmt"
+	"github.com/c12s/celestial/helper"
 	"github.com/c12s/celestial/model/config"
 	"github.com/c12s/celestial/storage"
+	aPb "github.com/c12s/scheme/apollo"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
 	sg "github.com/c12s/stellar-go"
@@ -17,12 +20,39 @@ import (
 type Server struct {
 	db         storage.DB
 	instrument map[string]string
+	apollo     string
 }
 
 func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, error) {
 	span, _ := sg.FromGRPCContext(ctx, "celestial.list")
 	defer span.Finish()
 	fmt.Println(span)
+
+	token, err := helper.ExtractToken(ctx)
+	if err != nil {
+		span.AddLog(&sg.KV{"token error", err.Error()})
+		return nil, err
+	}
+
+	client := NewApolloClient(s.apollo)
+	resp, err := client.Auth(
+		helper.AppendToken(
+			sg.NewTracedGRPCContext(ctx, span),
+			token,
+		),
+		&aPb.AuthOpt{
+			Data: map[string]string{"intent": "auth"},
+		},
+	)
+	if err != nil {
+		span.AddLog(&sg.KV{"apollo resp error", err.Error()})
+		return nil, err
+	}
+
+	if !resp.Value {
+		span.AddLog(&sg.KV{"apollo.auth value", resp.Data["message"]})
+		return nil, errors.New(resp.Data["message"])
+	}
 
 	switch req.Kind {
 	case cPb.ReqKind_SECRETS:
@@ -61,6 +91,32 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 	span, _ := sg.FromGRPCContext(ctx, "celestial.mutate")
 	defer span.Finish()
 	fmt.Println(span)
+
+	token, err := helper.ExtractToken(ctx)
+	if err != nil {
+		span.AddLog(&sg.KV{"token error", err.Error()})
+		return nil, err
+	}
+
+	client := NewApolloClient(s.apollo)
+	resp, err := client.Auth(
+		helper.AppendToken(
+			sg.NewTracedGRPCContext(ctx, span),
+			token,
+		),
+		&aPb.AuthOpt{
+			Data: map[string]string{"intent": "auth"},
+		},
+	)
+	if err != nil {
+		span.AddLog(&sg.KV{"apollo resp error", err.Error()})
+		return nil, err
+	}
+
+	if !resp.Value {
+		span.AddLog(&sg.KV{"apollo.auth value", resp.Data["message"]})
+		return nil, errors.New(resp.Data["message"])
+	}
 
 	switch req.Mutate.Kind {
 	case bPb.TaskKind_SECRETS:
@@ -106,6 +162,7 @@ func Run(db storage.DB, conf *config.Config) {
 	celestialServer := &Server{
 		db:         db,
 		instrument: conf.InstrumentConf,
+		apollo:     conf.Apollo,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

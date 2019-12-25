@@ -23,15 +23,15 @@ type Server struct {
 	apollo     string
 }
 
-func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, error) {
-	span, _ := sg.FromGRPCContext(ctx, "celestial.list")
+func (s *Server) auth(ctx context.Context) (string, error) {
+	span, _ := sg.FromGRPCContext(ctx, "auth")
 	defer span.Finish()
 	fmt.Println(span)
 
 	token, err := helper.ExtractToken(ctx)
 	if err != nil {
 		span.AddLog(&sg.KV{"token error", err.Error()})
-		return nil, err
+		return "", err
 	}
 
 	client := NewApolloClient(s.apollo)
@@ -46,38 +46,76 @@ func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, err
 	)
 	if err != nil {
 		span.AddLog(&sg.KV{"apollo resp error", err.Error()})
-		return nil, err
+		return "", err
 	}
 
 	if !resp.Value {
 		span.AddLog(&sg.KV{"apollo.auth value", resp.Data["message"]})
-		return nil, errors.New(resp.Data["message"])
+		return "", errors.New(resp.Data["message"])
+	}
+
+	return token, nil
+}
+
+func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, error) {
+	span, _ := sg.FromGRPCContext(ctx, "celestial.list")
+	defer span.Finish()
+	fmt.Println(span)
+
+	token, err := s.auth(ctx)
+	if err != nil {
+		span.AddLog(&sg.KV{"auth error", err.Error()})
+		return nil, err
 	}
 
 	switch req.Kind {
 	case cPb.ReqKind_SECRETS:
-		err, resp := s.db.Secrets().List(sg.NewTracedGRPCContext(ctx, span), req.Extras)
+		err, resp := s.db.Secrets().List(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			),
+			req.Extras,
+		)
 		if err != nil {
 			span.AddLog(&sg.KV{"secrets list error", err.Error()})
 			return nil, err
 		}
 		return resp, nil
 	case cPb.ReqKind_ACTIONS:
-		err, resp := s.db.Actions().List(sg.NewTracedGRPCContext(ctx, span), req.Extras)
+		err, resp := s.db.Actions().List(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			),
+			req.Extras,
+		)
 		if err != nil {
 			span.AddLog(&sg.KV{"action list error", err.Error()})
 			return nil, err
 		}
 		return resp, nil
 	case cPb.ReqKind_CONFIGS:
-		err, resp := s.db.Configs().List(sg.NewTracedGRPCContext(ctx, span), req.Extras)
+		err, resp := s.db.Configs().List(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			),
+			req.Extras,
+		)
 		if err != nil {
 			span.AddLog(&sg.KV{"configs list error", err.Error()})
 			return nil, err
 		}
 		return resp, nil
 	case cPb.ReqKind_NAMESPACES:
-		err, resp := s.db.Namespaces().List(sg.NewTracedGRPCContext(ctx, span), req.Extras)
+		err, resp := s.db.Namespaces().List(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			),
+			req.Extras,
+		)
 		if err != nil {
 			span.AddLog(&sg.KV{"namespaces list error", err.Error()})
 			return nil, err
@@ -92,56 +130,56 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 	defer span.Finish()
 	fmt.Println(span)
 
-	token, err := helper.ExtractToken(ctx)
+	token, err := s.auth(ctx)
 	if err != nil {
-		span.AddLog(&sg.KV{"token error", err.Error()})
+		span.AddLog(&sg.KV{"auth error", err.Error()})
 		return nil, err
-	}
-
-	client := NewApolloClient(s.apollo)
-	resp, err := client.Auth(
-		helper.AppendToken(
-			sg.NewTracedGRPCContext(ctx, span),
-			token,
-		),
-		&aPb.AuthOpt{
-			Data: map[string]string{"intent": "auth"},
-		},
-	)
-	if err != nil {
-		span.AddLog(&sg.KV{"apollo resp error", err.Error()})
-		return nil, err
-	}
-
-	if !resp.Value {
-		span.AddLog(&sg.KV{"apollo.auth value", resp.Data["message"]})
-		return nil, errors.New(resp.Data["message"])
 	}
 
 	switch req.Mutate.Kind {
 	case bPb.TaskKind_SECRETS:
-		err, resp := s.db.Secrets().Mutate(sg.NewTracedGRPCContext(ctx, span), req)
+		err, resp := s.db.Secrets().Mutate(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			), req,
+		)
 		if err != nil {
 			span.AddLog(&sg.KV{"secrets mutate error", err.Error()})
 			return nil, err
 		}
 		return resp, nil
 	case bPb.TaskKind_ACTIONS:
-		err, resp := s.db.Actions().Mutate(sg.NewTracedGRPCContext(ctx, span), req)
+		err, resp := s.db.Actions().Mutate(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			), req,
+		)
 		if err != nil {
 			span.AddLog(&sg.KV{"actions mutate error", err.Error()})
 			return nil, err
 		}
 		return resp, nil
 	case bPb.TaskKind_CONFIGS:
-		err, resp := s.db.Configs().Mutate(sg.NewTracedGRPCContext(ctx, span), req)
+		err, resp := s.db.Configs().Mutate(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			), req,
+		)
 		if err != nil {
 			span.AddLog(&sg.KV{"configs mutate error", err.Error()})
 			return nil, err
 		}
 		return resp, nil
 	case bPb.TaskKind_NAMESPACES:
-		err, resp := s.db.Namespaces().Mutate(sg.NewTracedGRPCContext(ctx, span), req)
+		err, resp := s.db.Namespaces().Mutate(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			), req,
+		)
 		if err != nil {
 			span.AddLog(&sg.KV{"namespaces mutate error", err.Error()})
 			return nil, err

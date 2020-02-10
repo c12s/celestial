@@ -12,6 +12,8 @@ github.com/c12s/scheme v0.0.0-20191219234711-d6d891128c66 h1:GbzJimOf1yDHdb4/Inr
 github.com/c12s/scheme v0.0.0-20191219234711-d6d891128c66/go.mod h1:iaQIUyLmrvaYaQR9fFwdb7fyClDZnvGlD8usIGjAp3w=
 github.com/c12s/scheme v0.0.0-20191220145534-99635c8ff650 h1:SCoCOgr3dd2Jrd72K7MZH6Zj/v2nZ27Xp2GX7u0t7p4=
 github.com/c12s/scheme v0.0.0-20191220145534-99635c8ff650/go.mod h1:iaQIUyLmrvaYaQR9fFwdb7fyClDZnvGlD8usIGjAp3w=
+github.com/c12s/scheme v0.0.0-20200209225247-56ec6dafc2a4 h1:MuIf4IeKqrRrBUu+enV4N4LXlNYuVAyTrMUSyxHdtbU=
+github.com/c12s/scheme v0.0.0-20200209225247-56ec6dafc2a4/go.mod h1:iaQIUyLmrvaYaQR9fFwdb7fyClDZnvGlD8usIGjAp3w=
 github.com/c12s/stellar-go v0.0.0-20191212010545-b354d089bf60 h1:EBQqndpcxP4yELXywPsDXv7o2en9U7O3f3u752k7oH8=
 github.com/c12s/stellar-go v0.0.0-20191212010545-b354d089bf60/go.mod h1:cKL5uBeXoQpAMj17zbDTXX4JurGl9wXXwLpbIDniJks=
 github.com/c12s/stellar-go v0.0.0-20191219215854-6f40f1ac5c31 h1:qYFPMidDjLWJmtLG/OwQPwTLTXnj/Q5j+Fb8NPFh0IA=

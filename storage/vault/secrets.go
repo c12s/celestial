@@ -14,7 +14,7 @@ type SSecrets struct {
 }
 
 const (
-	keyPrefix = "ckv/data"
+	keyPrefix = "secret"
 )
 
 //ckv/data/topology/regionid/clusterid/nodes/nodeid/secrets

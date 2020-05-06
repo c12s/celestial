@@ -9,6 +9,7 @@ type Config struct {
 	Address        string            `yaml:"address"`
 	Apollo         string            `yaml:"apollo"`
 	Gravity        string            `yaml:"gravity"`
+	Meridian       string            `yaml:"meridian"`
 	ClientConf     ClientConfig      `yaml:"client"`
 	Endpoints      []string          `yaml:"db"`
 	SEndpoints     []string          `yaml:"sdb"`

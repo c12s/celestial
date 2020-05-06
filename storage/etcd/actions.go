@@ -203,7 +203,8 @@ func (a *Actions) List(ctx context.Context, extras map[string]string) (error, *c
 
 	datas := []*cPb.Data{}
 	for _, item := range gresp.Kvs {
-		newKey := helper.Key(string(item.Key), "actions")
+		artefact := helper.NewNSArtifact(extras["user"], extras["namespace"], "actions")
+		newKey := helper.NewKey(string(item.Key), artefact)
 		ls := helper.SplitLabels(string(item.Value))
 		switch cmp {
 		case "all":
@@ -299,7 +300,8 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	go chspan.Finish()
 
 	for _, item := range gresp.Kvs {
-		key := helper.Key(string(item.Key), "actions")
+		artefact := helper.NewNSArtifact(task.UserId, task.Namespace, "actions")
+		key := helper.NewKey(string(item.Key), artefact)
 		newKey := helper.Join(key, helper.TSToString(task.Timestamp))
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)

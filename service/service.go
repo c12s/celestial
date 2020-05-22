@@ -1,12 +1,10 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 	"github.com/c12s/celestial/helper"
 	"github.com/c12s/celestial/model/config"
 	"github.com/c12s/celestial/storage"
-	aPb "github.com/c12s/scheme/apollo"
 	bPb "github.com/c12s/scheme/blackhole"
 	cPb "github.com/c12s/scheme/celestial"
 	sg "github.com/c12s/stellar-go"
@@ -21,40 +19,7 @@ type Server struct {
 	db         storage.DB
 	instrument map[string]string
 	apollo     string
-}
-
-func (s *Server) auth(ctx context.Context) (string, error) {
-	span, _ := sg.FromGRPCContext(ctx, "auth")
-	defer span.Finish()
-	fmt.Println(span)
-
-	token, err := helper.ExtractToken(ctx)
-	if err != nil {
-		span.AddLog(&sg.KV{"token error", err.Error()})
-		return "", err
-	}
-
-	client := NewApolloClient(s.apollo)
-	resp, err := client.Auth(
-		helper.AppendToken(
-			sg.NewTracedGRPCContext(ctx, span),
-			token,
-		),
-		&aPb.AuthOpt{
-			Data: map[string]string{"intent": "auth"},
-		},
-	)
-	if err != nil {
-		span.AddLog(&sg.KV{"apollo resp error", err.Error()})
-		return "", err
-	}
-
-	if !resp.Value {
-		span.AddLog(&sg.KV{"apollo.auth value", resp.Data["message"]})
-		return "", errors.New(resp.Data["message"])
-	}
-
-	return token, nil
+	meridian   string
 }
 
 func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, error) {
@@ -62,9 +27,21 @@ func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, err
 	defer span.Finish()
 	fmt.Println(span)
 
-	token, err := s.auth(ctx)
+	token, err := helper.ExtractToken(ctx)
+	if err != nil {
+		span.AddLog(&sg.KV{"token error", err.Error()})
+		return nil, err
+	}
+
+	err = s.auth(ctx, listOpt(req, token))
 	if err != nil {
 		span.AddLog(&sg.KV{"auth error", err.Error()})
+		return nil, err
+	}
+
+	_, err = s.checkNS(ctx, req.Extras["user"], req.Extras["namespace"])
+	if err != nil {
+		span.AddLog(&sg.KV{"check ns error", err.Error()})
 		return nil, err
 	}
 
@@ -108,19 +85,6 @@ func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, err
 			return nil, err
 		}
 		return resp, nil
-	case cPb.ReqKind_NAMESPACES:
-		err, resp := s.db.Namespaces().List(
-			helper.AppendToken(
-				sg.NewTracedGRPCContext(ctx, span),
-				token,
-			),
-			req.Extras,
-		)
-		if err != nil {
-			span.AddLog(&sg.KV{"namespaces list error", err.Error()})
-			return nil, err
-		}
-		return resp, nil
 	}
 	return &cPb.ListResp{Error: "Not valid file type"}, nil
 }
@@ -130,9 +94,21 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 	defer span.Finish()
 	fmt.Println(span)
 
-	token, err := s.auth(ctx)
+	token, err := helper.ExtractToken(ctx)
+	if err != nil {
+		span.AddLog(&sg.KV{"token error", err.Error()})
+		return nil, err
+	}
+
+	err = s.auth(ctx, mutateOpt(req, token))
 	if err != nil {
 		span.AddLog(&sg.KV{"auth error", err.Error()})
+		return nil, err
+	}
+
+	_, err = s.checkNS(ctx, req.Mutate.UserId, req.Mutate.Namespace)
+	if err != nil {
+		span.AddLog(&sg.KV{"check ns error", err.Error()})
 		return nil, err
 	}
 
@@ -173,18 +149,6 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 			return nil, err
 		}
 		return resp, nil
-	case bPb.TaskKind_NAMESPACES:
-		err, resp := s.db.Namespaces().Mutate(
-			helper.AppendToken(
-				sg.NewTracedGRPCContext(ctx, span),
-				token,
-			), req,
-		)
-		if err != nil {
-			span.AddLog(&sg.KV{"namespaces mutate error", err.Error()})
-			return nil, err
-		}
-		return resp, nil
 	}
 	return &cPb.MutateResp{Error: "Not valid file type"}, nil
 }
@@ -201,6 +165,7 @@ func Run(db storage.DB, conf *config.Config) {
 		db:         db,
 		instrument: conf.InstrumentConf,
 		apollo:     conf.Apollo,
+		meridian:   conf.Meridian,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

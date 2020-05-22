@@ -52,9 +52,9 @@ func (n *Secrets) get(ctx context.Context, key, user string) (error, *cPb.Data) 
 		}
 
 		secrets := []string{}
-		for k, v := range resp {
-			kv := strings.Join([]string{k, v}, ":")
-			secrets = append(secrets, kv)
+		for _, v := range resp {
+			// kv := strings.Join([]string{k}, ":")
+			secrets = append(secrets, merge(v, 3))
 		}
 		data.Data["secrets"] = strings.Join(secrets, ",")
 	}
@@ -81,7 +81,8 @@ func (s *Secrets) List(ctx context.Context, extras map[string]string) (error, *c
 
 	datas := []*cPb.Data{}
 	for _, item := range gresp.Kvs {
-		newKey := helper.NewKey(string(item.Key), "secrets")
+		artefact := helper.NewNSArtifact(extras["user"], extras["namespace"], "secrets")
+		newKey := helper.NewKey(string(item.Key), artefact)
 		ls := helper.SplitLabels(string(item.Value))
 		switch cmp {
 		case "all":
@@ -108,8 +109,21 @@ func (s *Secrets) List(ctx context.Context, extras map[string]string) (error, *c
 func toSecrets(payloads []*bPb.Payload) map[string]interface{} {
 	input := map[string]interface{}{}
 	for _, payload := range payloads {
-		for pk, pv := range payload.Value {
-			input[pk] = pv
+		switch payload.Kind {
+		case bPb.PayloadKind_FILE:
+			if fname, ok := payload.Value["file_name"]; ok {
+				delete(payload.Value, "file_name")
+				for pk, pv := range payload.Value {
+					input[strings.Join([]string{fname, pk}, ":")] = pv
+				}
+				payload.Value["file_name"] = fname
+			} else {
+				continue
+			}
+		case bPb.PayloadKind_ENV:
+			for pk, pv := range payload.Value {
+				input[pk] = pv
+			}
 		}
 	}
 	return input
@@ -185,7 +199,8 @@ func (s *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	go chspan.Finish()
 
 	for _, item := range gresp.Kvs {
-		newKey := helper.NewKey(string(item.Key), "secrets")
+		artefact := helper.NewNSArtifact(task.UserId, task.Namespace, "secrets")
+		newKey := helper.NewKey(string(item.Key), artefact)
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)
 

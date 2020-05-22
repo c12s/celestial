@@ -11,9 +11,8 @@ import (
 )
 
 const (
-	namespaces = "namespaces"
-	labels     = "labels"
-	status     = "status"
+	labels = "labels"
+	status = "status"
 
 	topology = "topology"
 	regions  = "regions"
@@ -25,44 +24,6 @@ const (
 
 	tasks = "tasks"
 )
-
-/*
-namespaces/labels/namespace -> [k:v, k:v]
-namespaces/namespace -> {data}
-namespaces/namespace/status -> "status"
-*/
-
-func Merge(m1, m2 map[string]string) {
-	for k, v := range m2 {
-		m1[k] = v
-	}
-}
-
-func NSKey(ns string) string {
-	// mid := fmt.Sprintf("%s:%s", namespace, name)
-	s := []string{namespaces, ns}
-	return strings.Join(s, "/")
-}
-
-func NSLabelsKey(name string) string {
-	prefix := NSKey(labels)
-	s := []string{prefix, name}
-	return strings.Join(s, "/")
-}
-
-func NSStatusKey(name string) string {
-	prefix := NSKey(name)
-	s := []string{prefix, status}
-	return strings.Join(s, "/")
-}
-
-func NS() string {
-	return namespaces
-}
-
-func NSLabels() string {
-	return strings.Join([]string{namespaces, labels}, "/")
-}
 
 func Compare(a, b []string, strict bool) bool {
 	for _, akv := range a {
@@ -95,9 +56,9 @@ func SplitLabels(value string) []string {
 topology/regions/labels/regionid/clusterid/nodeid -> [k:v, k:v]
 topology/regions/regionid/clusterid/nodes/nodeid -> {stats}
 
-topology/regions/regionid/clusterid/nodeid/configs -> {config list with status}
-topology/regions/regionid/clusterid/nodeid/secrets -> {secrets list with status}
-topology/regions/actions/regionid/clusterid/nodeid/timestamp -> {actions list history with status}
+topology/regions/regionid/clusterid/nodeid/userid:namespace:configs -> {config list with status}
+topology/regions/regionid/clusterid/nodeid/userid:namespace:secrets -> {secrets list with status}
+topology/regions/userid:namespace:actions/regionid/clusterid/nodeid/timestamp -> {actions list history with status}
 
 topology/regions/tasks/timestamp -> {tasks submited to particular cluster} holds data until all changes are commited! Append log
 */
@@ -166,6 +127,11 @@ func SearchKey(regionid, clusterid string) (string, error) {
 		return JoinParts("", topology, regions, labels, regionid, clusterid), nil
 	}
 	return "", errors.New("Request not valid")
+}
+
+// topology/regions/regionid/clusterid/nodeid/userid:namespace:artifact {configs | secrets | adtions}
+func NewNSArtifact(userid, namespace, artifact string) string {
+	return strings.Join([]string{userid, namespace, artifact}, ":")
 }
 
 func NewKey(path, artifact string) string {

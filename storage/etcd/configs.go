@@ -75,7 +75,8 @@ func (c *Configs) List(ctx context.Context, extras map[string]string) (error, *c
 
 	datas := []*cPb.Data{}
 	for _, item := range gresp.Kvs {
-		newKey := helper.NewKey(string(item.Key), "configs")
+		artefact := helper.NewNSArtifact(extras["user"], extras["namespace"], "configs")
+		newKey := helper.NewKey(string(item.Key), artefact)
 		ls := helper.SplitLabels(string(item.Value))
 		switch cmp {
 		case "all":
@@ -140,7 +141,6 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	span, _ := sg.FromGRPCContext(ctx, "mutate")
 	defer span.Finish()
 	fmt.Println(span)
-	fmt.Println("SERIALIZE ", span.Serialize())
 
 	// Log mutate request for resilience
 	logTaskKey, lerr := logMutate(sg.NewTracedGRPCContext(ctx, span), req, c.db)
@@ -166,7 +166,8 @@ func (c *Configs) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	go chspan.Finish()
 
 	for _, item := range gresp.Kvs {
-		newKey := helper.NewKey(string(item.Key), "configs")
+		artefact := helper.NewNSArtifact(task.UserId, task.Namespace, "configs")
+		newKey := helper.NewKey(string(item.Key), artefact)
 		ls := helper.SplitLabels(string(item.Value))
 		els := helper.Labels(task.Task.Selector.Labels)
 

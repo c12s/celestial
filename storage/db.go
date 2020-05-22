@@ -9,8 +9,8 @@ type DB interface {
 	Secrets() Secrets
 	Configs() Configs
 	Actions() Actions
-	Namespaces() Namespaces
 	Reconcile() Reconcile
+	Init()
 }
 
 type Configs interface {
@@ -23,11 +23,6 @@ type Actions interface {
 	List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp)
 	Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp)
 	StatusUpdate(ctx context.Context, key, newStatus string) error
-}
-
-type Namespaces interface {
-	List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp)
-	Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp)
 }
 
 type Secrets interface {

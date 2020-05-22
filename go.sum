@@ -12,6 +12,10 @@ github.com/c12s/scheme v0.0.0-20191219234711-d6d891128c66 h1:GbzJimOf1yDHdb4/Inr
 github.com/c12s/scheme v0.0.0-20191219234711-d6d891128c66/go.mod h1:iaQIUyLmrvaYaQR9fFwdb7fyClDZnvGlD8usIGjAp3w=
 github.com/c12s/scheme v0.0.0-20191220145534-99635c8ff650 h1:SCoCOgr3dd2Jrd72K7MZH6Zj/v2nZ27Xp2GX7u0t7p4=
 github.com/c12s/scheme v0.0.0-20191220145534-99635c8ff650/go.mod h1:iaQIUyLmrvaYaQR9fFwdb7fyClDZnvGlD8usIGjAp3w=
+github.com/c12s/scheme v0.0.0-20200209225247-56ec6dafc2a4 h1:MuIf4IeKqrRrBUu+enV4N4LXlNYuVAyTrMUSyxHdtbU=
+github.com/c12s/scheme v0.0.0-20200209225247-56ec6dafc2a4/go.mod h1:iaQIUyLmrvaYaQR9fFwdb7fyClDZnvGlD8usIGjAp3w=
+github.com/c12s/scheme v0.0.0-20200211232926-6490b386ab3f h1:eNXytxUZoYijRBB4fEvHGk39wKnAyu82VoIK1z9WegU=
+github.com/c12s/scheme v0.0.0-20200211232926-6490b386ab3f/go.mod h1:iaQIUyLmrvaYaQR9fFwdb7fyClDZnvGlD8usIGjAp3w=
 github.com/c12s/stellar-go v0.0.0-20191212010545-b354d089bf60 h1:EBQqndpcxP4yELXywPsDXv7o2en9U7O3f3u752k7oH8=
 github.com/c12s/stellar-go v0.0.0-20191212010545-b354d089bf60/go.mod h1:cKL5uBeXoQpAMj17zbDTXX4JurGl9wXXwLpbIDniJks=
 github.com/c12s/stellar-go v0.0.0-20191219215854-6f40f1ac5c31 h1:qYFPMidDjLWJmtLG/OwQPwTLTXnj/Q5j+Fb8NPFh0IA=
@@ -22,6 +26,9 @@ github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/coreos/etcd v3.3.18+incompatible h1:Zz1aXgDrFFi1nadh58tA9ktt06cmPTwNNP3dXwIq1lE=
 github.com/coreos/etcd v3.3.18+incompatible/go.mod h1:uF7uidLiAD3TWHmW31ZFd/JWoc32PjwdhPthX9715RE=
+github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf h1:iW4rZ826su+pqaw19uhpSCzhj44qo35pNgKFGqzDKkU=
+github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
+github.com/coreos/go-systemd/v22 v22.0.0/go.mod h1:xO0FLkIi5MaZafQlIrOotqXZ90ih+1atmu1JpKERPPk=
 github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f h1:lBNOc5arjvs8E5mO2tbpBpLoyyu8B6e44T7hJy6potg=
 github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f/go.mod h1:E3G3o1h8I7cfcXa63jLwjI0eiQQMgzzUDFVpN/nH/eA=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -33,6 +40,7 @@ github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5Kwzbycv
 github.com/fatih/structs v1.1.0/go.mod h1:9NiDSp5zOcgEDl+j00MP/WkGVPOlPRLejGD8Ga6PJ7M=
 github.com/go-ldap/ldap v3.0.2+incompatible/go.mod h1:qfd9rJvER9Q0/D/Sqn1DfHRoBp40uXYvFoEVrNEPqRc=
 github.com/go-test/deep v1.0.2-0.20181118220953-042da051cf31/go.mod h1:wGDj63lr65AM2AQyKZd/NYHGb0R+1RLqB8NKt3aSFNA=
+github.com/godbus/dbus/v5 v5.0.3/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/gogo/protobuf v1.3.1 h1:DqDEcV5aeaTmdFBePNpYsp3FlcVH/2ISVVM9Qf8PSls=
 github.com/gogo/protobuf v1.3.1/go.mod h1:SlYgWuQ5SjCEi6WLHjHCa1yvBfUnHcTbrrZtXPKa29o=
 github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=

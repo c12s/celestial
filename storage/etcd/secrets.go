@@ -234,7 +234,7 @@ func (s *Secrets) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	}
 
 	span.AddLog(&sg.KV{"config addition", "Config added."})
-	return nil, &cPb.MutateResp{"Secrets added."}
+	return nil, &cPb.MutateResp{Error: "Secrets added."}
 }
 
 func (s *Secrets) sendToGravity(ctx context.Context, req *cPb.MutateReq, taskKey string) error {

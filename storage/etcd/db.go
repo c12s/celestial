@@ -36,12 +36,13 @@ const (
 )
 
 type DB struct {
-	Kv      clientv3.KV
-	Client  *clientv3.Client
-	sdb     storage.SecretsDB
-	s       sync.Syncer
-	Gravity string
-	Apollo  string
+	Kv       clientv3.KV
+	Client   *clientv3.Client
+	sdb      storage.SecretsDB
+	s        sync.Syncer
+	Gravity  string
+	Apollo   string
+	Magnetar string
 }
 
 func key(rid, cid, nid, template string) string {
@@ -91,12 +92,13 @@ func New(conf *config.Config, timeout time.Duration) (*DB, error) {
 	}
 
 	return &DB{
-		Kv:      clientv3.NewKV(cli),
-		Client:  cli,
-		sdb:     sdb,
-		s:       ns,
-		Gravity: conf.Gravity,
-		Apollo:  conf.Apollo,
+		Kv:       clientv3.NewKV(cli),
+		Client:   cli,
+		sdb:      sdb,
+		s:        ns,
+		Gravity:  conf.Gravity,
+		Apollo:   conf.Apollo,
+		Magnetar: conf.Magnetar,
 	}, nil
 }
 
@@ -107,5 +109,7 @@ func (db *DB) Secrets() storage.Secrets { return &Secrets{db} }
 func (db *DB) Configs() storage.Configs { return &Configs{db} }
 
 func (db *DB) Actions() storage.Actions { return &Actions{db} }
+
+func (db *DB) Topology() storage.Topology { return &Topology{db} }
 
 func (db *DB) Reconcile() storage.Reconcile { return &Reconcile{db} }

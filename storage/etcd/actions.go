@@ -336,7 +336,7 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	}
 
 	span.AddLog(&sg.KV{"actions addition", "Actions added."})
-	return nil, &cPb.MutateResp{"Actions added."}
+	return nil, &cPb.MutateResp{Error: "Actions added."}
 }
 
 func (a *Actions) sendToGravity(ctx context.Context, req *cPb.MutateReq, taskKey string) error {

@@ -85,6 +85,19 @@ func (s *Server) List(ctx context.Context, req *cPb.ListReq) (*cPb.ListResp, err
 			return nil, err
 		}
 		return resp, nil
+	case cPb.ReqKind_TOPOLOGY:
+		err, resp := s.db.Topology().List(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			),
+			req.Extras,
+		)
+		if err != nil {
+			span.AddLog(&sg.KV{"configs list error", err.Error()})
+			return nil, err
+		}
+		return resp, nil
 	}
 	return &cPb.ListResp{Error: "Not valid file type"}, nil
 }
@@ -149,6 +162,18 @@ func (s *Server) Mutate(ctx context.Context, req *cPb.MutateReq) (*cPb.MutateRes
 			return nil, err
 		}
 		return resp, nil
+	case bPb.TaskKind_TOPOLOGY:
+		err, resp := s.db.Topology().Mutate(
+			helper.AppendToken(
+				sg.NewTracedGRPCContext(ctx, span),
+				token,
+			), req,
+		)
+		if err != nil {
+			span.AddLog(&sg.KV{"configs mutate error", err.Error()})
+			return nil, err
+		}
+		return resp, nil
 	}
 	return &cPb.MutateResp{Error: "Not valid file type"}, nil
 }
@@ -181,6 +206,7 @@ func Run(db storage.DB, conf *config.Config) {
 		return
 	}
 	go c.Start(ctx, 15*time.Second)
+	db.Topology().Watcher(ctx)
 	db.Reconcile().Start(ctx, conf.Gravity)
 
 	fmt.Println("Celestial RPC Started")

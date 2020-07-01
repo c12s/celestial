@@ -284,7 +284,7 @@ func (a *Actions) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.M
 	}
 
 	task := req.Mutate
-	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId)
+	searchLabelsKey, kerr := helper.SearchKey(task.Task.RegionId, task.Task.ClusterId, task.UserId, task.Namespace)
 	if kerr != nil {
 		span.AddLog(&sg.KV{"search key error", kerr.Error()})
 		return kerr, nil

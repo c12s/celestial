@@ -77,6 +77,8 @@ func listKind(kind cPb.ReqKind) string {
 		return "actions"
 	case cPb.ReqKind_CONFIGS:
 		return "configs"
+	case cPb.ReqKind_TOPOLOGY:
+		return "topology"
 	}
 	return ""
 }
@@ -89,6 +91,8 @@ func mutateKind(kind bPb.TaskKind) string {
 		return "actions"
 	case bPb.TaskKind_CONFIGS:
 		return "configs"
+	case bPb.TaskKind_TOPOLOGY:
+		return "topology"
 	}
 	return ""
 }

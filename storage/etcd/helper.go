@@ -1,7 +1,9 @@
 package etcd
 
 import (
+	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -52,7 +54,8 @@ func difference(slice1 []string, slice2 []string) []string {
 func tolabels(ls map[string]string) string {
 	lbs := []string{}
 	for k, v := range ls {
-		if k != "ID" && k != "NAME" {
+		if k != "ID" && k != "NAME" && k != "RETENTION" && k != "NEW_ID" {
+			fmt.Println("{{PAIR}}", k, v)
 			lbs = append(lbs, strings.Join([]string{k, v}, ":"))
 		}
 	}
@@ -60,10 +63,22 @@ func tolabels(ls map[string]string) string {
 	return strings.Join(lbs, ",")
 }
 
-func index(nodes []string) []string {
+func index(nodes []string, userid, namespace string) []string {
 	ret := []string{}
 	for _, n := range nodes {
-		ret = append(ret, strings.Split(n, ".")[2])
+		// ret = append(ret, strings.Split(n, ".")[2])
+		n = strings.ReplaceAll(n, ".", "/")
+		prefix := strings.Join([]string{
+			"topology", "regions", n,
+		}, "/")
+
+		sufix := strings.Join([]string{
+			userid, namespace, "topology",
+		}, ":")
+
+		ret = append(ret, strings.Join([]string{
+			prefix, sufix,
+		}, "/"))
 	}
 
 	return ret
@@ -75,4 +90,8 @@ func newId(id string) string {
 		"regions",
 		id,
 	}, ".")
+}
+
+func toString(n int64) string {
+	return strconv.FormatInt(n, 10)
 }

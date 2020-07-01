@@ -9,6 +9,7 @@ type DB interface {
 	Secrets() Secrets
 	Configs() Configs
 	Actions() Actions
+	Topology() Topology
 	Reconcile() Reconcile
 	Init()
 }
@@ -33,4 +34,11 @@ type Secrets interface {
 
 type Reconcile interface {
 	Start(ctx context.Context, gravity string)
+}
+
+type Topology interface {
+	List(ctx context.Context, extras map[string]string) (error, *cPb.ListResp)
+	Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.MutateResp)
+	StatusUpdate(ctx context.Context, key, newStatus string) error
+	Watcher(ctx context.Context)
 }

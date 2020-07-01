@@ -29,7 +29,7 @@ func (s *SSecrets) getToken(ctx context.Context, user string) (error, string) {
 	fmt.Println(span)
 
 	client := service.NewApolloClient(s.db.apolloAddress)
-	resp, err := client.GetToken(sg.NewTracedGRPCContext(ctx, span), &aPb.GetReq{user})
+	resp, err := client.GetToken(sg.NewTracedGRPCContext(ctx, span), &aPb.GetReq{User: user})
 	if err != nil {
 		span.AddLog(&sg.KV{"get token error", err.Error()})
 		return err, ""

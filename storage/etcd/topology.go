@@ -30,6 +30,8 @@ func (t *Topology) Watcher(ctx context.Context) {
 			fmt.Println(err.Error())
 		}
 
+		// Watcher for key allocated/topology/regions/regionid/clusterid
+		// in magnetar service
 		for _, ev := range resp.Kvs {
 			t.watch(ctx, string(ev.Value))
 		}
@@ -63,18 +65,20 @@ func (t *Topology) watch(ctx context.Context, key string) {
 						// TODO: For now just update status, as is but in future
 						// Since this will store machine info we should get whole data
 						// And update not just status but all machine data!!!
-						_, err := t.db.Kv.Put(ctx, string(ev.Kv.Key), "Alive")
-						if err != nil {
-							fmt.Println(err.Error())
-						}
+						fmt.Printf("%s %q : %q\n", ev.Type, ev.Kv.Key, ev.Kv.Value)
+						// _, err := t.db.Kv.Put(ctx, string(ev.Kv.Key), "Alive")
+						// if err != nil {
+						// 	fmt.Println(err.Error())
+						// }
 					} else if ev.Type == clientv3.EventTypeDelete {
 						// TODO: For now just update status, as is but in future
 						// Since this will store machine info we should get whole data
 						// And update just status!!!
-						_, err := t.db.Kv.Put(ctx, string(ev.Kv.Key), "Down")
-						if err != nil {
-							fmt.Println(err.Error())
-						}
+						fmt.Printf("%s %q : %q\n", ev.Type, ev.Kv.Key, ev.Kv.Value)
+						// _, err := t.db.Kv.Put(ctx, string(ev.Kv.Key), "Down")
+						// if err != nil {
+						// 	fmt.Println(err.Error())
+						// }
 					}
 				}
 			case <-c.Done():
@@ -85,10 +89,11 @@ func (t *Topology) watch(ctx context.Context, key string) {
 	}(ctx)
 }
 
-func (t *Topology) mutate(ctx context.Context, availableNodes []string, tmpLabels map[string]string, userid, namespace string) error {
+func (t *Topology) mutate(ctx context.Context, availableNodes []string, tmpLabels map[string]string, userid, namespace, retention string) error {
 	span, _ := sg.FromGRPCContext(ctx, "mutate")
 	defer span.Finish()
 	fmt.Println(span)
+	fmt.Println("{{LABELS}}", tmpLabels)
 
 	for _, id := range availableNodes {
 		rid, cid, nid := helper.GetParts(id)
@@ -100,9 +105,25 @@ func (t *Topology) mutate(ctx context.Context, availableNodes []string, tmpLabel
 				&sg.KV{"Marshaling error", err.Error()},
 			)
 		}
+
+		data := map[string]string{
+			"ID":               nid,
+			"Cluster":          cid,
+			"Status":           "Alive",
+			"Region":           rid,
+			"Retention period": retention,
+		}
+
+		nData, err := proto.Marshal(&cPb.Data{Data: data})
+		if err != nil {
+			span.AddLog(
+				&sg.KV{"Marshaling error", err.Error()},
+			)
+		}
+
 		ops := []clientv3.Op{
 			clientv3.OpPut(keys["labels"], tmpLabels[id]),
-			clientv3.OpPut(keys["nodeid"], "Pending"),
+			clientv3.OpPut(keys["nodeid"], string(nData)),
 			clientv3.OpPut(keys["configs"], string(cData)),
 			clientv3.OpPut(keys["secrets"], string(cData)),
 			clientv3.OpPut(keys["actions"], string(cData)),
@@ -150,8 +171,11 @@ func (t *Topology) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.
 		tmpLabels[id] = tolabels(p.Value)
 	}
 
+	fmt.Println("{{REQUEST}} ", ids)
 	client := service.NewMagnetarClient(t.db.Magnetar)
-	resp, err := client.Reserve(sg.NewTracedGRPCContext(ctx, span), &mPb.ReserveMsg{Ids: ids})
+	resp, err := client.Reserve(sg.NewTracedGRPCContext(ctx, span),
+		&mPb.ReserveMsg{Ids: ids, Metricttl: "2h"},
+	)
 	if err != nil {
 		span.AddLog(
 			&sg.KV{"Magnetar error", err.Error()},
@@ -166,13 +190,19 @@ func (t *Topology) Mutate(ctx context.Context, req *cPb.MutateReq) (error, *cPb.
 	}
 
 	availableNodes := difference(ids, resp.Excluded)
-	err = t.mutate(ctx, availableNodes, tmpLabels, req.Mutate.UserId, req.Mutate.Namespace)
+	err = t.mutate(
+		ctx,
+		availableNodes,
+		tmpLabels,
+		req.Mutate.UserId,
+		req.Mutate.Namespace,
+		tk.Payload[0].Value["RETENTION"])
 	if err != nil {
 		return err, nil
 	}
 
 	//Save index for gravity
-	req.Index = index(availableNodes)
+	req.Index = index(availableNodes, req.Mutate.UserId, req.Mutate.Namespace)
 	err = t.sendToGravity(sg.NewTracedGRPCContext(ctx, span), req, logTaskKey)
 	if err != nil {
 		span.AddLog(&sg.KV{"putTask error", err.Error()})

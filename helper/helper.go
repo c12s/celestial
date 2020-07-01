@@ -21,8 +21,10 @@ const (
 	configs  = "configs"
 	secrets  = "secrets"
 	undone   = "undone"
+	watcher  = "watcher"
 
-	tasks = "tasks"
+	tasks     = "tasks"
+	allocated = "allocated"
 )
 
 func Compare(a, b []string, strict bool) bool {
@@ -118,13 +120,14 @@ func Key(path, replacement string) string {
 	return strings.Replace(path, labels, replacement, -1)
 }
 
-func SearchKey(regionid, clusterid string) (string, error) {
+func SearchKey(regionid, clusterid, userid, namespace string) (string, error) {
+	user := strings.Join([]string{userid, namespace}, ":")
 	if regionid == "*" && clusterid == "*" {
-		return JoinParts("", topology, regions, labels), nil // topology/regions/labels/
+		return JoinParts("", topology, regions, user, labels), nil // topology/regions/userid:namespace/labels/
 	} else if regionid != "*" && clusterid == "*" {
-		return JoinParts("", topology, regions, labels, regionid), nil // topology/regions/labels/regionid/
-	} else if regionid != "*" && clusterid != "*" { //topology/regions/labels/regionid/clusterid/
-		return JoinParts("", topology, regions, labels, regionid, clusterid), nil
+		return JoinParts("", topology, regions, user, labels, regionid), nil // topology/regions/userid:namespace/labels/regionid/
+	} else if regionid != "*" && clusterid != "*" { //topology/regions/userId:namespace/labels/regionid/clusterid/
+		return JoinParts("", topology, regions, user, labels, regionid, clusterid), nil
 	}
 	return "", errors.New("Request not valid")
 }
@@ -177,4 +180,52 @@ func ExtractToken(ctx context.Context) (string, error) {
 	}
 
 	return md["c12stoken"][0], nil
+}
+
+// region.cluster.nodeid
+func ReserveKey(regionid, clusterid, nodeid string) string {
+	return strings.Join([]string{regionid, clusterid, nodeid}, ".")
+}
+
+func template(user, kind string) string {
+	return strings.Join([]string{user, kind}, ":")
+}
+
+func GetParts(id string) (string, string, string) {
+	parts := strings.Split(id, ".")
+	return parts[0], parts[1], parts[2]
+}
+
+/*
+topology/regions/userid:namespace/labels/regionid/clusterid/nodeid
+topology/regions/regionid/clusterid/nodes/nodeid
+
+topology/regions/regionid/clusterid/nodeid/userid:namespace:configs
+topology/regions/regionid/clusterid/nodeid/userid:namespace:secrets
+topology/regions/userid:n ffamespace:actions/regionid/clusterid/nodeid
+allocated/topology/regions/regionid/clusterid/nodeid
+*/
+func TKeys(regionid, clusterid, nodeid, userid, ns string) map[string]string {
+	prefix := strings.Join([]string{topology, regions}, "/")
+	id := strings.Join([]string{regionid, clusterid, nodeid}, "/")
+	user := strings.Join([]string{userid, ns}, ":")
+	return map[string]string{
+		"watch":   strings.Join([]string{allocated, prefix, regionid, clusterid}, "/"),
+		"nodeid":  strings.Join([]string{prefix, id}, "/"),
+		"labels":  strings.Join([]string{prefix, user, labels, id}, "/"),
+		"configs": strings.Join([]string{prefix, id, template(user, "configs")}, "/"),
+		"secrets": strings.Join([]string{prefix, id, template(user, "secrets")}, "/"),
+		"actions": strings.Join([]string{prefix, template(user, "actions"), id}, "/"),
+	}
+}
+
+// watch for nodes in some region.cluster
+// and this can be used on restart of service to start watchers again
+// watcher/topology/regions/region/cluster -> topology/regions/region/cluster
+func WatcherKey(key string) string {
+	return strings.Join([]string{watcher, key}, "/")
+}
+
+func Trim(key string) string {
+	return strings.ReplaceAll(key, "allocated/", "")
 }
